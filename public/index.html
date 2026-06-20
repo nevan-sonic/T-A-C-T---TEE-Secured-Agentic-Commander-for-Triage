@@ -27,9 +27,15 @@
                     <p class="tagline">TEE-Secured Agentic Incident Commander | Terminal 3 Network</p>
                 </div>
             </div>
-            <div class="status-badge connected">
-                <span class="pulse-dot"></span>
-                T3N TESTNET ACTIVE
+            <div class="navbar-actions" style="display: flex; gap: 0.75rem; align-items: center;">
+                <button id="connect-wallet-btn" class="rollback-small-btn" onclick="connectWalletManual()" style="padding: 0.5rem 1rem; border-radius: 6px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.8); font-family: 'Outfit', sans-serif; transition: all 0.2s;">
+                    <span class="wallet-dot" style="display:inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 8px #ef4444;"></span>
+                    Connect Wallet
+                </button>
+                <div class="status-badge connected">
+                    <span class="pulse-dot"></span>
+                    T3N TESTNET ACTIVE
+                </div>
             </div>
         </header>
 
@@ -308,6 +314,41 @@
             }
         }
 
+        function updateWalletBtn(address) {
+            const btn = document.getElementById("connect-wallet-btn");
+            if (btn) {
+                const shortAddr = address.substring(0, 6) + "..." + address.substring(address.length - 4);
+                btn.innerHTML = `
+                    <span class="wallet-dot" style="display:inline-block; width: 8px; height: 8px; border-radius: 50%; background: hsl(142, 70%, 45%); box-shadow: 0 0 8px #4ade80;"></span>
+                    ${shortAddr.toUpperCase()}
+                `;
+                btn.style.borderColor = "rgba(74, 222, 128, 0.4)";
+                btn.style.color = "#4ade80";
+            }
+        }
+
+        async function connectWalletManual() {
+            if (window.ethereum) {
+                try {
+                    appendTerminalLog("Connecting MetaMask wallet...", "info");
+                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    if (accounts && accounts.length > 0) {
+                        const addr = accounts[0].toLowerCase();
+                        AliceDID = `did:t3n:${addr.startsWith("0x") ? addr.substring(2) : addr}`;
+                        console.log(`[Dashboard] Connected MetaMask account: ${AliceDID}`);
+                        appendTerminalLog(`Connected wallet address: ${AliceDID}`, "success");
+                        await registerDID(AliceDID);
+                        updateWalletBtn(addr);
+                    }
+                } catch (err) {
+                    appendTerminalLog(`Wallet connection failed: ${err.message}`, "error");
+                }
+            } else {
+                appendTerminalLog("MetaMask wallet extension not detected in browser.", "error");
+                alert("MetaMask not detected. Please install the extension.");
+            }
+        }
+
         if (window.ethereum) {
             window.ethereum.request({ method: 'eth_accounts' }).then(accounts => {
                 if (accounts && accounts.length > 0) {
@@ -315,18 +356,10 @@
                     AliceDID = `did:t3n:${addr.startsWith("0x") ? addr.substring(2) : addr}`;
                     console.log(`[Dashboard] MetaMask active account: ${AliceDID}`);
                     registerDID(AliceDID);
+                    updateWalletBtn(addr);
                 } else {
-                    window.ethereum.request({ method: 'eth_requestAccounts' }).then(reqAccounts => {
-                        if (reqAccounts && reqAccounts.length > 0) {
-                            const addr = reqAccounts[0].toLowerCase();
-                            AliceDID = `did:t3n:${addr.startsWith("0x") ? addr.substring(2) : addr}`;
-                            console.log(`[Dashboard] MetaMask connected account: ${AliceDID}`);
-                            registerDID(AliceDID);
-                        }
-                    }).catch(err => {
-                        console.warn("[Dashboard] MetaMask account connection rejected. Using default AliceDID.");
-                        registerDID(AliceDID);
-                    });
+                    console.log("[Dashboard] No accounts connected initially. Click 'Connect Wallet' manually.");
+                    registerDID(AliceDID);
                 }
             }).catch(err => {
                 console.error("[Dashboard] MetaMask accounts query failed:", err);
@@ -340,12 +373,14 @@
                     AliceDID = `did:t3n:${addr.startsWith("0x") ? addr.substring(2) : addr}`;
                     console.log(`[Dashboard] MetaMask account changed to: ${AliceDID}`);
                     registerDID(AliceDID);
+                    updateWalletBtn(addr);
                 }
             });
         } else {
             AliceDID = `did:t3n:${fallbackAddress.substring(2)}`;
             console.log(`[Dashboard] MetaMask not detected. Using local fallback DID: ${AliceDID}`);
             registerDID(AliceDID);
+            updateWalletBtn(fallbackAddress);
         }
 
         const payloads = {

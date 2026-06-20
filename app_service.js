@@ -1,4 +1,3 @@
-// Production Gateway Database Connection Pool Init
 const { Pool } = require("pg");
 
 const poolConfig = {
