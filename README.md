@@ -35,22 +35,22 @@ sequenceDiagram
     participant Git as GitHub Remote Repo
 
     APM->>Orchestrator: 1. Trigger Incident Alert (e.g., P1 / P2)
-    Orchestrator->>TEE: 2. Establish Session (Handshake) & Fetch Access Token
-    Orchestrator->>TEE: 3. Authenticate Logs Read (Scope: repo:read)
+    Orchestrator->>TEE: 2. Establish Session (Handshake)
+    Orchestrator->>TEE: 3. Authenticate Logs Read & executeAndDecode(investigate-logs)
     Orchestrator->>LLM: 4. Analyze Logs & Classify Severity (LOW / MEDIUM / HIGH)
     LLM-->>Orchestrator: Root Cause + Configuration Patch Proposal
-    Orchestrator->>TEE: 5. Draft PR & Apply Config Patch (Scope: repo:write)
+    Orchestrator->>TEE: 5. Draft PR & Apply Config Patch (executeAndDecode/create-fix-pr)
     Orchestrator->>UI: 6. Await Cryptographic Signatures (EIP-191 Challenge)
     UI->>TEE: 7. Post Recovered signature proof to Enclave
     TEE->>TEE: 8. Cryptographic Identity & ACL Check
-    Orchestrator->>TEE: 9. Merge PR (executeUnder)
+    Orchestrator->>TEE: 9. Merge PR (executeAndDecode/merge-fix)
     TEE->>Git: 10. Merge branch & Fetch remote Merge SHA
     TEE->>Orchestrator: PR Merged Successfully
     Orchestrator->>Orchestrator: 11. Run Telemetry Check
     alt Regression Detected (HIGH Severity)
-        Orchestrator->>UI: 12. requestDelegation Re-Auth (Scope: repo:revert)
+        Orchestrator->>UI: 12. Rollback Approval Challenge (Scope: revert-commit)
         UI->>TEE: 13. Submit signature challenge proof
-        Orchestrator->>TEE: 14. Execute Rollback (executeUnder)
+        Orchestrator->>TEE: 14. Execute Rollback (executeAndDecode/revert-commit)
         TEE->>Git: 15. git revert -m 1 & Push to remote main
     end
 ```
@@ -63,28 +63,28 @@ Every secure action in T.A.C.T. translates directly to a Terminal 3 ADK primitiv
 
 ### 1. Enclave Handshake
 Establishes session keys between the client orchestrator and the TEE hardware sandbox.
-* **SDK Wrapper:** [src/sdk-wrapper/t3-agent.ts#L43](file:///c:/Users/Nevan/Desktop/Starlight/src/sdk-wrapper/t3-agent.ts#L43) (`handshake()`)
-* **Agent Core:** [src/orchestrator/agent-core.ts#L77](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/agent-core.ts#L77) (`const session = await agent.handshake();`)
+* **SDK Wrapper:** [src/sdk-wrapper/t3-agent.ts#L96](file:///c:/Users/Nevan/Desktop/Starlight/src/sdk-wrapper/t3-agent.ts#L96) (`handshake()`)
+* **Agent Core:** [src/orchestrator/agent-core.ts#L94](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/agent-core.ts#L94) (`const session = await agent.handshake();`)
 
-### 2. User Authentication & Identity Scope Routing
-Executes operations under the identity of a delegated user DID (e.g. read access).
-* **SDK Wrapper:** [src/sdk-wrapper/t3-agent.ts#L53](file:///c:/Users/Nevan/Desktop/Starlight/src/sdk-wrapper/t3-agent.ts#L53) (`authenticate()`)
-* **Agent Core:** [src/orchestrator/agent-core.ts#L82](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/agent-core.ts#L82) (`agent.authenticate({ delegateDID, scope: "repo:read", ... })`)
+### 2. Session Authentication
+Authenticates the active session keys.
+* **SDK Wrapper:** [src/sdk-wrapper/t3-agent.ts#L110](file:///c:/Users/Nevan/Desktop/Starlight/src/sdk-wrapper/t3-agent.ts#L110) (`authenticate()`)
+* **Agent Core:** [src/orchestrator/agent-core.ts#L99](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/agent-core.ts#L99) (`await agent.authenticate({ session })`)
 
-### 3. Requesting Cryptographic Delegation Challenges
-Requests co-signature approvals from code owners/engineers. EIP-191 verification is handled strictly inside the enclave boundaries.
-* **SDK Wrapper:** [src/sdk-wrapper/t3-agent.ts#L66](file:///c:/Users/Nevan/Desktop/Starlight/src/sdk-wrapper/t3-agent.ts#L66) (`requestDelegation()`)
-* **Agent Core:** [src/orchestrator/approvals.ts#L12](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/approvals.ts#L12) (`agent.requestDelegation({ delegateDID, scope: "repo:merge", ... })`)
+### 3. Guest WASM Contract Publication
+Registers the compiled guest WASM component under the tenant's secure z-namespace.
+* **SDK Wrapper:** [src/sdk-wrapper/t3-agent.ts#L32](file:///c:/Users/Nevan/Desktop/Starlight/src/sdk-wrapper/t3-agent.ts#L32) (`client.contracts.publish()`)
+* **Agent Core:** [src/orchestrator/agent-core.ts#L20](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/agent-core.ts#L20) (`await client.contracts.publish({ script_name, script_version, wasm_binary_path, functions })`)
 
-### 4. Secure Enclave Isolation (`executeUnder`)
-Injects credentials (like `github_token`) directly from the enclave's secure z-namespace vaults and runs file edits, merges, and rollbacks inside the isolated boundary.
-* **SDK Wrapper:** [src/sdk-wrapper/t3-agent.ts#L98](file:///c:/Users/Nevan/Desktop/Starlight/src/sdk-wrapper/t3-agent.ts#L98) (`executeUnder()`)
-* **Agent Core:** [src/orchestrator/execute.ts#L17](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/execute.ts#L17) (`agent.executeUnder({ delegateDID, scope: "repo:merge", ... })`)
+### 4. Secure Enclave Execution (`executeAndDecode`)
+Invokes exported functions (`investigate-logs`, `create-fix-pr`, `merge-fix`, `revert-commit`) inside the isolated WASM guest contract boundary.
+* **SDK Wrapper:** [src/sdk-wrapper/t3-agent.ts#L115](file:///c:/Users/Nevan/Desktop/Starlight/src/sdk-wrapper/t3-agent.ts#L115) (`executeAndDecode()`)
+* **Agent Core:** [src/orchestrator/agent-core.ts#L105](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/agent-core.ts#L105) (`await agent.executeAndDecode({ script_name, script_version, function_name, input })`)
 
-### 5. Tamper-Proof Audit Ledger
-Permanently appends immutable transaction steps to T3's secure audit memory.
-* **SDK Wrapper:** [src/sdk-wrapper/t3-agent.ts#L25](file:///c:/Users/Nevan/Desktop/Starlight/src/sdk-wrapper/t3-agent.ts#L25) (`agent.audit.write()`)
-* **Agent Core:** [src/orchestrator/agent-core.ts#L93](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/agent-core.ts#L93) (`await agent.audit.write({ action: "LOG_READ", ... })`)
+### 5. Tamper-Proof Audit Ledger (`client.maps`)
+Permanently appends immutable transaction steps and audit logs to the T3 `client.maps` store structure under the `z:<tid>:audit-ledger` KV namespace.
+* **SDK Wrapper:** [src/sdk-wrapper/t3-agent.ts#L57](file:///c:/Users/Nevan/Desktop/Starlight/src/sdk-wrapper/t3-agent.ts#L57) (`client.maps.set()`)
+* **Agent Core:** [src/orchestrator/agent-core.ts#L113](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/agent-core.ts#L113) (`await agent.audit.write({ action, actor, incidentId })`)
 
 ---
 
