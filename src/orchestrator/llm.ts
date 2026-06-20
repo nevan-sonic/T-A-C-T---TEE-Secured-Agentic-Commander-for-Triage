@@ -17,7 +17,7 @@ Analyze the logs and:
 Your response MUST be a JSON object containing precisely these three keys:
 {
   "rootCause": "A description of the root cause",
-  "patch": "The exact code/config modification needed (e.g. pool_size changes)",
+  "patch": "A JSON string containing only the key-value config properties to update in db_config.json, e.g. '{\\\"pool_size\\\": 50}' or '{\\\"pool_size\\\": 50, \\\"db_port\\\": 5432}'. Keep it as a valid escaped JSON string.",
   "explanation": "Brief explanation of why this fix works"
 }
 Do NOT include any markdown markup outside the JSON. Return only the JSON object.

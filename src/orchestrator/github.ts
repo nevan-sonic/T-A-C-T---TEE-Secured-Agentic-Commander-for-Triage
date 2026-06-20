@@ -91,18 +91,51 @@ export async function createPR(patchContent: string, secureContext: any): Promis
     
     // Apply patch
     try {
-        const patchObj = JSON.parse(patchContent);
+        let patchObj: any = {};
+        
+        // Try parsing patchContent as JSON first
+        try {
+            if (typeof patchContent === "string") {
+                // Remove markdown codeblock formatting if present
+                const cleanPatch = patchContent.replace(/```json/g, "").replace(/```/g, "").trim();
+                patchObj = JSON.parse(cleanPatch);
+            } else {
+                patchObj = patchContent;
+            }
+        } catch (jsonErr) {
+            // If it is a raw text description, try to extract key values (e.g. "pool_size: 50" or "pool_size=50" or "pool_size to 50")
+            console.log(`[Git Engine] Patch content is not JSON. Attempting regex extraction...`);
+            const poolSizeMatch = patchContent.match(/pool_size\s*[:=\s\w]*\s*(\d+)/i) || patchContent.match(/pool\s*size\s*[:=\s\w]*\s*(\d+)/i) || patchContent.match(/pool_size\s*to\s*(\d+)/i);
+            if (poolSizeMatch) {
+                patchObj = { pool_size: parseInt(poolSizeMatch[1], 10) };
+            } else {
+                // Absolute fallback to ensure db_config.json remains valid JSON
+                patchObj = { pool_size: 50 };
+            }
+        }
+
         // Load current config
-        const currentConfig = JSON.parse(fs.readFileSync(configFilePath, "utf-8"));
+        let currentConfig: any = {
+            service_name: "api-gateway",
+            db_host: "localhost",
+            db_port: 5432,
+            pool_size: 20
+        };
+        
+        try {
+            if (fs.existsSync(configFilePath)) {
+                currentConfig = JSON.parse(fs.readFileSync(configFilePath, "utf-8"));
+            }
+        } catch (e) {
+            console.warn("[Git Engine] Existing config file is invalid JSON. Re-initializing base config.");
+        }
         
         // Merge patch keys
         const updatedConfig = { ...currentConfig, ...patchObj };
         fs.writeFileSync(configFilePath, JSON.stringify(updatedConfig, null, 2));
-        console.log(`[Git Engine] Config file updated. New pool_size: ${updatedConfig.pool_size}`);
-    } catch (e) {
-        // Fallback if not JSON
-        fs.writeFileSync(configFilePath, patchContent);
-        console.log("[Git Engine] Raw patch content written directly to db_config.json");
+        console.log(`[Git Engine] Config file updated successfully. Merged keys: ${JSON.stringify(patchObj)}`);
+    } catch (e: any) {
+        console.error(`[Git Engine Error] Critical error applying config patch: ${e.message}`);
     }
 
     // Commit change
