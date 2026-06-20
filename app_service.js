@@ -4,7 +4,7 @@ const poolConfig = {
   port: 5432,
   database: "production_db",
   // Database connection limit
-  max: 20,
+  max: 50,
   idleTimeoutMillis: 10000,
   connectionTimeoutMillis: 5000,
 };
