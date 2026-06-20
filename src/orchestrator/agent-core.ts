@@ -1,6 +1,6 @@
 import * as dotenv from "dotenv";
 import * as path from "path";
-import { T3Agent, T3Session, ApprovalResult } from "../sdk-wrapper/t3-agent";
+import { T3Agent, T3Session, ApprovalResult, client } from "../sdk-wrapper/t3-agent";
 import { classifySeverity, getSeverityConfig, Severity } from "./severity";
 import { analyzeLogs } from "./llm";
 import { requestApprovals } from "./approvals";
@@ -11,6 +11,23 @@ import { notifySlack } from "./notify";
 
 // Load environment variables
 dotenv.config();
+
+// On startup, publish the guest contract WASM component
+(async () => {
+    try {
+        const tenantDID = await client.tenant.claim();
+        const tid = tenantDID.split(":").pop()!;
+        await client.contracts.publish({
+            script_name: `z:${tid}:incident-contracts`,
+            script_version: "1.0.0",
+            wasm_binary_path: path.join(process.cwd(), "target/wasm32-wasip2/release/department_of_incidents_contract.wasm"),
+            functions: ["investigate-logs", "create-fix-pr", "merge-fix", "revert-commit"]
+        });
+        console.log(`[Incident Startup] Guest WASM contract published successfully under tenant z:${tid}`);
+    } catch (e: any) {
+        console.error(`[Incident Startup] Contract publication failed: ${e.message}`);
+    }
+})();
 
 export interface Alert {
     id: string;
@@ -77,16 +94,19 @@ export async function handleIncident(alert: Alert): Promise<void> {
         const session = await agent.handshake();
         incident.session = session;
 
-        // Step 2: Read logs under on-call engineer identity
+        // Step 2: Read logs under guest execution
         incident.status = "Analyzing Logs in TEE";
-        const logs = await agent.authenticate({
-            session,
-            delegateDID: alert.onCallEngineerDID,
-            scope: "repo:read",
-            action: async () => {
-                console.log(`[Incident Agent] Securely loading logs for analysis...`);
-                return alert.logs;
-            }
+        await agent.authenticate({ session });
+        
+        const tenantDID = await client.tenant.claim();
+        const tid = tenantDID.split(":").pop()!;
+        const scriptName = `z:${tid}:incident-contracts`;
+        
+        const logs = await agent.executeAndDecode({
+            script_name: scriptName,
+            script_version: "1.0.0",
+            function_name: "investigate-logs",
+            input: JSON.stringify({ logs: alert.logs })
         });
         incident.logsReadTime = Date.now();
 
@@ -112,16 +132,15 @@ export async function handleIncident(alert: Alert): Promise<void> {
 
         console.log(`[Incident Router] Severity Triaged: ${severity}. Approvals required: ${config.approvalsRequired}`);
 
-        // Step 5: Draft Pull Request (Create Branch) under Code Owner identity
+        // Step 5: Draft Pull Request (Create Branch) under guest execution
         incident.status = "Drafting Pull Request";
-        const prDetails = await agent.authenticate({
-            session,
-            delegateDID: alert.codeOwnerDID,
-            scope: "repo:write",
-            action: async () => {
-                // Returns real branch and dummy url
-                return createPR(diagnosis.patch, {});
-            }
+        agent.currentIncidentId = alert.id;
+        
+        const prDetails = await agent.executeAndDecode({
+            script_name: scriptName,
+            script_version: "1.0.0",
+            function_name: "create-fix-pr",
+            input: JSON.stringify({ patch: diagnosis.patch })
         });
 
         incident.prUrl = prDetails.prUrl;
@@ -150,13 +169,12 @@ export async function handleIncident(alert: Alert): Promise<void> {
         incident.status = "Merging Fix";
         console.log(`[Incident Agent] Executing merge under delegated credentials...`);
         
-        // We use the first approval result signature credential to merge
-        const primaryApproval = approvalResults.length > 0 
-            ? approvalResults[0] 
-            : { approverDID: alert.codeOwnerDID, credential: session.authorizedDIDs.get(alert.codeOwnerDID) || "auto_token", signedAt: Date.now() };
+        const primaryApproverDID = approvalResults.length > 0 
+            ? approvalResults[0].approverDID 
+            : alert.codeOwnerDID;
 
         // Perform merge
-        const mergeResult = await executeMerge(session, primaryApproval, incident.branch!, incident.prUrl!);
+        const mergeResult = await executeMerge(session, primaryApproverDID, incident.branch!, incident.prUrl!);
         
         incident.mergeCommit = mergeResult.sha;
         incident.mergedTime = Date.now();
@@ -179,7 +197,7 @@ export async function handleIncident(alert: Alert): Promise<void> {
             
             // Execute rollback under original approver re-auth
             incident.status = "Rolling Back";
-            await executeRollback(primaryApproval.approverDID, mergeResult.sha, alert.id);
+            await executeRollback(primaryApproverDID, mergeResult.sha, alert.id);
             
             incident.status = "Rolled Back";
             incident.rolledBackTime = Date.now();

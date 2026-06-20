@@ -550,7 +550,7 @@
                             <p><strong>Requested Scope:</strong> <code>${app.scope}</code></p>
                         </div>
                         <div class="approval-actions">
-                            <button class="action-btn approve-btn" onclick="signApproval('${app.id}', '${app.approverDID}')">Confirm & Sign with T3 Identity</button>
+                            <button class="action-btn approve-btn" onclick="signApproval('${app.id}', '${app.approverDID}', '${app.scope}')">Confirm & Sign with T3 Identity</button>
                         </div>
                     </div>
                 `).join('');
@@ -559,10 +559,14 @@
             }
         }
 
-        async function signApproval(id, approverDID) {
+        async function signApproval(id, approverDID, scope) {
             appendTerminalLog(`Initiating EIP-191 Personal Sign signature challenge for approval: ${id}...`, 'system');
             
-            const message = `Verify identity for incident resolution: ${id}`;
+            const matches = approverDID.match(/did:t3n:([0-9a-fA-F]+)/) || approverDID.match(/did:t3:user:([0-9a-fA-F]+)/) || approverDID.match(/did:t3:user:(\w+)/);
+            const expectedAddressHex = matches ? matches[1] : 'c8eb415587d29e3155bb615149156b0ce5f2ecc5';
+            const tid = expectedAddressHex.toLowerCase();
+            const message = `T3 Agent Authorization Grant\nAgent DID: did:t3:agent:department-of-incidents\nContract: z:${tid}:incident-contracts\nFunction: ${scope}\nOutbound Hosts: api.github.com\nApproval ID: ${id}`;
+            
             let signature = '';
             
             // Check for metamask connection

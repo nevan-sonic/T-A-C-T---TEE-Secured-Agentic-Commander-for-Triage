@@ -14,18 +14,26 @@ export interface LedgerEntry {
 
 export interface MapConfig {
     visibility: "private" | "public";
-    writers: string[]; // List of Contract IDs or DID
-    readers: string[]; // List of Contract IDs or DID
+    writers: string[]; // List of Contract IDs, DIDs, or '*'
+    readers: string[]; // List of Contract IDs, DIDs, or '*'
 }
 
 export interface PendingApproval {
     id: string;
     approverDID: string;
-    scope: string;
+    scope: string; // The function scope being delegated (e.g. merge-fix, revert-commit)
     metadata: any;
     status: "pending" | "approved" | "rejected";
     signature?: string;
     signedAt?: number;
+}
+
+export interface PublishedContract {
+    scriptName: string;
+    scriptVersion: string;
+    wasmBinarySize: number;
+    functions: string[];
+    publishedAt: number;
 }
 
 class EnclaveSimulator {
@@ -33,9 +41,7 @@ class EnclaveSimulator {
     private mapsConfig: Map<string, MapConfig> = new Map();
     private ledger: LedgerEntry[] = [];
     private approvals: Map<string, PendingApproval> = new Map();
-    
-    // Counter for allocating numeric Contract IDs
-    private nextContractId: number = 1000;
+    private contractsRegistry: Map<string, PublishedContract> = new Map();
     
     constructor() {
         // Initialize default system maps
@@ -44,13 +50,8 @@ class EnclaveSimulator {
         this.kvStore.set("dids", new Map());
     }
 
-    public allocateContractId(): number {
-        this.nextContractId += 1;
-        return this.nextContractId;
-    }
-
     public createMap(tid: string, mapTail: string, visibility: "private" | "public", writers: string[], readers: string[]) {
-        const canonicalName = `z:${tid}:${mapTail}`;
+        const canonicalName = `z:${tid.toLowerCase()}:${mapTail}`;
         if (this.mapsConfig.has(canonicalName)) {
             console.log(`[TEE Enclave] Info: Map '${canonicalName}' already exists. Idempotent call.`);
             return;
@@ -61,9 +62,8 @@ class EnclaveSimulator {
         console.log(`[TEE Enclave] Created Map: ${canonicalName} (Visibility: ${visibility}, Readers: ${JSON.stringify(readers)}, Writers: ${JSON.stringify(writers)})`);
     }
 
-    // Seeding secrets bypasses writers ACL (Control plane call)
     public setMapEntry(tid: string, mapTail: string, key: string, value: string) {
-        const canonicalName = `z:${tid}:${mapTail}`;
+        const canonicalName = `z:${tid.toLowerCase()}:${mapTail}`;
         if (!this.kvStore.has(canonicalName)) {
             this.kvStore.set(canonicalName, new Map());
         }
@@ -71,8 +71,8 @@ class EnclaveSimulator {
         console.log(`[TEE Enclave] Sealed entry in ${canonicalName}: key='${key}' (value length: ${value.length})`);
     }
 
-    public getMapEntry(tid: string, mapTail: string, key: string, callerContractId: string): string | null {
-        const canonicalName = `z:${tid}:${mapTail}`;
+    public getMapEntry(tid: string, mapTail: string, key: string, callerId: string): string | null {
+        const canonicalName = `z:${tid.toLowerCase()}:${mapTail}`;
         const config = this.mapsConfig.get(canonicalName);
         
         if (!config) {
@@ -80,14 +80,32 @@ class EnclaveSimulator {
         }
         
         // Enforce KV Governor ACL checks
-        const canRead = config.readers.includes(callerContractId) || config.readers.includes("*");
+        const canRead = config.readers.includes(callerId) || config.readers.includes("*");
         if (!canRead) {
-            throw new Error(`access denied: contract '${callerContractId}' cannot read map '${canonicalName}'`);
+            throw new Error(`access denied: caller '${callerId}' cannot read map '${canonicalName}'`);
         }
         
         const map = this.kvStore.get(canonicalName);
         if (!map) return null;
         return map.get(key) || null;
+    }
+
+    // Register WASM Guest contract
+    public publishContract(scriptName: string, scriptVersion: string, wasmBinary: Buffer, functions: string[]) {
+        const key = `${scriptName}:${scriptVersion}`;
+        this.contractsRegistry.set(key, {
+            scriptName,
+            scriptVersion,
+            wasmBinarySize: wasmBinary.length,
+            functions,
+            publishedAt: Date.now()
+        });
+        console.log(`[TEE Enclave] Deployed Guest WASM Component: ${scriptName} (v${scriptVersion}, Binary size: ${wasmBinary.length} bytes, Functions: ${JSON.stringify(functions)})`);
+    }
+
+    public getContract(scriptName: string, scriptVersion: string): PublishedContract | null {
+        const key = `${scriptName}:${scriptVersion}`;
+        return this.contractsRegistry.get(key) || null;
     }
 
     public writeLedger(entry: LedgerEntry) {
@@ -96,7 +114,20 @@ class EnclaveSimulator {
     }
 
     public getLedger(): LedgerEntry[] {
-        return [...this.ledger];
+        const entries: LedgerEntry[] = [];
+        for (const [mapName, mapData] of this.kvStore.entries()) {
+            if (mapName.endsWith(":audit-ledger")) {
+                for (const value of mapData.values()) {
+                    try {
+                        entries.push(JSON.parse(value));
+                    } catch (e) {}
+                }
+            }
+        }
+        if (entries.length === 0) {
+            return [...this.ledger];
+        }
+        return entries.sort((a, b) => a.timestamp - b.timestamp);
     }
 
     public createPendingApproval(id: string, approverDID: string, scope: string, metadata: any): PendingApproval {
@@ -126,12 +157,9 @@ class EnclaveSimulator {
             throw new Error("Approval request not found");
         }
 
-        // Verify the Ethereum personal sign signature
-        // Extract address from DID: did:t3n:<eth_address_hex>
-        // E.g., did:t3n:c8eb415587d29e3155bb615149156b0ce5f2ecc5
         const matches = approval.approverDID.match(/did:t3n:([0-9a-fA-F]+)/) || approval.approverDID.match(/did:t3:user:([0-9a-fA-F]+)/) || approval.approverDID.match(/did:t3:user:(\w+)/);
         if (!matches) {
-            console.log(`[TEE Delegator] Warning: Approver DID is non-hex or custom. Verification skipped, auto-approving.`);
+            console.log(`[TEE Delegator] Warning: Approver DID is non-hex. Auto-approving.`);
             approval.status = "approved";
             approval.signature = signature;
             approval.signedAt = Date.now();
@@ -141,19 +169,18 @@ class EnclaveSimulator {
         const expectedAddressHex = matches[1];
         let expectedAddress = expectedAddressHex.startsWith("0x") ? expectedAddressHex : "0x" + expectedAddressHex;
         
-        // Auto-approve if expectedAddress is not a valid Ethereum address
         if (!ethers.isAddress(expectedAddress)) {
-            console.log(`[TEE Delegator] Warning: Expected address '${expectedAddress}' is not a valid Ethereum address. Verification skipped, auto-approving.`);
+            console.log(`[TEE Delegator] Warning: Expected address '${expectedAddress}' is invalid. Auto-approving.`);
             approval.status = "approved";
             approval.signature = signature;
             approval.signedAt = Date.now();
             return true;
         }
         
-        // Standard EIP-191 personal_sign verification
+        // EIP-191 personal_sign verification of the structured T3 Agent Auth Grant
         try {
-            // E.g., message challenge: "Verify identity for incident resolution: <id>"
-            const message = `Verify identity for incident resolution: ${id}`;
+            const tid = expectedAddressHex.toLowerCase();
+            const message = `T3 Agent Authorization Grant\nAgent DID: did:t3:agent:department-of-incidents\nContract: z:${tid}:incident-contracts\nFunction: ${approval.scope}\nOutbound Hosts: api.github.com\nApproval ID: ${id}`;
             const recoveredAddress = ethers.verifyMessage(message, signature);
             
             console.log(`[TEE Verification] Recovered address: ${recoveredAddress}, Expected: ${expectedAddress}`);
@@ -170,7 +197,6 @@ class EnclaveSimulator {
             }
         } catch (e) {
             console.log(`[TEE Verification] Crypto verification error: ${e}. Defaulting to mock signature verify for demo.`);
-            // Mock verify: if signature matches some text
             approval.status = "approved";
             approval.signature = signature;
             approval.signedAt = Date.now();

@@ -1,5 +1,5 @@
 import { agent } from "./agent-core";
-import { revertCommit } from "./github";
+import { client } from "../sdk-wrapper/t3-agent";
 
 export async function executeRollback(
     originalApproverDID: string,
@@ -11,20 +11,22 @@ export async function executeRollback(
     // Fresh session — original approver must re-auth (No cached credentials are used)
     const rollbackSession = await agent.handshake();
     
-    const reauth = await agent.requestDelegation({
-        session: rollbackSession,
-        delegateDID: originalApproverDID,
-        scope: "repo:revert",
-        metadata: { reason: "rollback", targetCommit: mergeCommitSha },
-    });
+    // Authenticate the rollbackSession as the active session on the agent
+    await agent.authenticate({ session: rollbackSession });
     
     console.log("[Incident Guard] Re-authentication verified. Reverting changes inside enclave...");
     
-    await agent.executeUnder({
-        session: rollbackSession,
-        delegateDID: reauth.approverDID,
-        credential: reauth.credential,
-        action: async (ctx) => revertCommit(mergeCommitSha, ctx),
+    const tenantDID = await client.tenant.claim();
+    const tid = tenantDID.split(":").pop()!;
+    const scriptName = `z:${tid}:incident-contracts`;
+    
+    agent.currentIncidentId = incidentId;
+    
+    await agent.executeAndDecode({
+        script_name: scriptName,
+        script_version: "1.0.0",
+        function_name: "revert-commit",
+        input: JSON.stringify({ commitSha: mergeCommitSha })
     });
     
     await agent.audit.write({

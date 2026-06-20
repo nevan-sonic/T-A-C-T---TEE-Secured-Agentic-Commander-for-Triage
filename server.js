@@ -38,16 +38,20 @@ try {
     const auditModule = require("./dist/orchestrator/audit");
     readAuditLedger = auditModule.readAuditLedger;
     
+    const { client } = require("./dist/sdk-wrapper/t3-agent");
+    
     // Seed credentials on startup (mimics tenant control plane execution)
     const envTid = process.env.T3N_TENANT_DID ? process.env.T3N_TENANT_DID.split(":").pop() : "c8eb415587d29e3155bb615149156b0ce5f2ecc5";
-    enclaveSimulator.createMap(envTid, "secrets", "private", ["1001"], ["1001"]);
-    enclaveSimulator.setMapEntry(envTid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "0x616355559f3b9880cf878749d4d8b42f5b7c9147552ce03793de353f9d3ef00d");
+    client.maps.create(envTid, "secrets", "private", ["1001"], ["1001"]).then(() => {
+        client.maps.set(envTid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "0x616355559f3b9880cf878749d4d8b42f5b7c9147552ce03793de353f9d3ef00d");
+    });
 
     // Also seed for the derived address from fallback key if different
     const derivedTid = "1dc692077Cbf6d404B619c8D9b6648849c74802c".toLowerCase();
     if (envTid.toLowerCase() !== derivedTid) {
-        enclaveSimulator.createMap(derivedTid, "secrets", "private", ["1001"], ["1001"]);
-        enclaveSimulator.setMapEntry(derivedTid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "0x616355559f3b9880cf878749d4d8b42f5b7c9147552ce03793de353f9d3ef00d");
+        client.maps.create(derivedTid, "secrets", "private", ["1001"], ["1001"]).then(() => {
+            client.maps.set(derivedTid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "0x616355559f3b9880cf878749d4d8b42f5b7c9147552ce03793de353f9d3ef00d");
+        });
     }
 
     // Seed default ONCALL_ENGINEER_DID on startup if different
@@ -57,8 +61,9 @@ try {
         if (matches) {
             const defaultTid = matches[1].toLowerCase();
             if (envTid.toLowerCase() !== defaultTid && derivedTid !== defaultTid) {
-                enclaveSimulator.createMap(defaultTid, "secrets", "private", ["1001"], ["1001"]);
-                enclaveSimulator.setMapEntry(defaultTid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "0x616355559f3b9880cf878749d4d8b42f5b7c9147552ce03793de353f9d3ef00d");
+                client.maps.create(defaultTid, "secrets", "private", ["1001"], ["1001"]).then(() => {
+                    client.maps.set(defaultTid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "0x616355559f3b9880cf878749d4d8b42f5b7c9147552ce03793de353f9d3ef00d");
+                });
             }
         }
     }
@@ -79,10 +84,12 @@ app.post("/api/register-active-did", (req, res) => {
         
         // Seed z-namespace secrets for this DID
         const matches = did.match(/did:t3n:([0-9a-fA-F]+)/) || did.match(/did:t3:user:([0-9a-fA-F]+)/);
-        if (matches && enclaveSimulator) {
+        if (matches) {
+            const { client } = require("./dist/sdk-wrapper/t3-agent");
             const tid = matches[1].toLowerCase();
-            enclaveSimulator.createMap(tid, "secrets", "private", ["1001"], ["1001"]);
-            enclaveSimulator.setMapEntry(tid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "0x616355559f3b9880cf878749d4d8b42f5b7c9147552ce03793de353f9d3ef00d");
+            client.maps.create(tid, "secrets", "private", ["1001"], ["1001"]).then(() => {
+                client.maps.set(tid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "0x616355559f3b9880cf878749d4d8b42f5b7c9147552ce03793de353f9d3ef00d");
+            });
         }
         
         return res.json({ status: "registered", did: activeBrowserDID });
