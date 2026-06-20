@@ -182,6 +182,9 @@ const fs = require("fs");
 const requestHistory = [];
 const WINDOW_SIZE = 30; // 15 seconds of history at 500ms intervals
 
+let activeConnections = 0;
+let connectionLogs = [];
+
 setInterval(async () => {
     const startTime = Date.now();
     let isError = false;
@@ -223,6 +226,112 @@ setInterval(async () => {
         requestHistory.shift();
     }
 }, 500);
+
+// GET /api/service: Mock Database Endpoint for Live Traffic Testing (Postman)
+app.get("/api/service", async (req, res) => {
+    const startTime = Date.now();
+    let isError = false;
+    let poolSize = 20;
+
+    try {
+        const appServicePath = path.join(__dirname, "app_service.js");
+        if (fs.existsSync(appServicePath)) {
+            const content = fs.readFileSync(appServicePath, "utf-8");
+            const match = content.match(/max:\s*(\d+)/);
+            if (match) {
+                poolSize = parseInt(match[1], 10);
+            }
+        }
+    } catch (e) {
+        console.error("[Service API] Error reading app_service.js config:", e);
+    }
+
+    if (activeConnections >= poolSize) {
+        isError = true;
+        const latency = 800 + Math.random() * 400; // timeout latency
+        await new Promise(resolve => setTimeout(resolve, latency));
+
+        const errorMsg = `ERROR [pool] Connection pool exhausted (max=${poolSize}, active=${activeConnections})`;
+        console.log(`[Service API] ${errorMsg}`);
+        connectionLogs.push(`[${new Date().toISOString()}] ${errorMsg}`);
+
+        const actualLatency = Date.now() - startTime;
+        requestHistory.push({ latency: actualLatency, isError: true });
+        if (requestHistory.length > WINDOW_SIZE) requestHistory.shift();
+
+        return res.status(500).json({
+            status: "error",
+            message: "Database connection pool exhausted",
+            max: poolSize,
+            active: activeConnections
+        });
+    }
+
+    // Process connection (with mock query delay of 150ms)
+    activeConnections++;
+    const queryTime = 120 + Math.round(Math.random() * 40); 
+    await new Promise(resolve => setTimeout(resolve, queryTime));
+    activeConnections--;
+
+    const actualLatency = Date.now() - startTime;
+    requestHistory.push({ latency: actualLatency, isError: false });
+    if (requestHistory.length > WINDOW_SIZE) requestHistory.shift();
+
+    return res.json({
+        status: "success",
+        queryTimeMs: actualLatency,
+        activeConnections
+    });
+});
+
+// Auto-triage background monitor
+setInterval(() => {
+    if (requestHistory.length < 10) return;
+
+    const errorCount = requestHistory.filter(r => r.isError).length;
+    const errorRate = Math.round((errorCount / requestHistory.length) * 100);
+
+    if (errorRate >= 45) {
+        let hasActiveIncident = false;
+        if (activeIncidents) {
+            activeIncidents.forEach((value) => {
+                if (value.status !== "Resolved" && value.status !== "Rolled Back" && !value.status.startsWith("Failed")) {
+                    hasActiveIncident = true;
+                }
+            });
+        }
+
+        if (!hasActiveIncident && handleIncident) {
+            const autoIncidentId = "AUTO-TRAFFIC-BOTTLENECK-" + Math.random().toString(36).substring(2, 6).toUpperCase();
+            console.log(`\n[Monitor Alert] Live error rate spiked to ${errorRate}%. Auto-triggering SRE incident triage: ${autoIncidentId}`);
+
+            const dynamicLogs = [
+                `ERROR [pool] Connection pool exhausted, high concurrent traffic spike.`,
+                `WARN  [db] Timeout acquiring connection after 5000ms`,
+                `ERROR [api] Request failed: TimeoutError: getConnection()`,
+                ...connectionLogs.slice(-5)
+            ];
+
+            const alertPayload = {
+                id: autoIncidentId,
+                severity: "HIGH",
+                service: "api-gateway",
+                triggeredAt: new Date().toISOString(),
+                errorRate,
+                p99Latency: 12000,
+                logs: dynamicLogs,
+                onCallEngineerDID: activeBrowserDID,
+                codeOwnerDID: activeBrowserDID
+            };
+
+            connectionLogs = [];
+
+            handleIncident(alertPayload).catch(err => {
+                console.error(`[Monitor Async Error] ${err.message}`);
+            });
+        }
+    }
+}, 4000);
 
 app.get("/api/telemetry-metrics", (req, res) => {
     if (requestHistory.length === 0) {
