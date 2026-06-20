@@ -177,6 +177,64 @@ app.post("/api/webhook", async (req, res) => {
     res.json({ status: "incident_triage_started", id: alert.id });
 });
 
+// Live target SRE service simulation (Fully Functional & Real-Time)
+const fs = require("fs");
+const requestHistory = [];
+const WINDOW_SIZE = 30; // 15 seconds of history at 500ms intervals
+
+setInterval(async () => {
+    const startTime = Date.now();
+    let isError = false;
+    
+    try {
+        // Read pool_size from db_config.json dynamically
+        const configPath = path.join(__dirname, "db_config.json");
+        let poolSize = 20;
+        if (fs.existsSync(configPath)) {
+            const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+            poolSize = config.pool_size || 20;
+        }
+        
+        if (poolSize < 30) {
+            // Pool size is exhausted (20) -> High latency and error spikes
+            const delay = 1000 + Math.random() * 1500; // 1.0s - 2.5s
+            await new Promise(resolve => setTimeout(resolve, delay));
+            
+            // 85% error rate
+            if (Math.random() < 0.85) {
+                isError = true;
+            }
+        } else {
+            // Pool size is resolved (50) -> Normal fast responses
+            const delay = 35 + Math.random() * 45; // 35ms - 80ms
+            await new Promise(resolve => setTimeout(resolve, delay));
+            isError = false;
+        }
+    } catch (e) {
+        isError = true;
+    }
+    
+    const latency = Date.now() - startTime;
+    requestHistory.push({ latency, isError });
+    if (requestHistory.length > WINDOW_SIZE) {
+        requestHistory.shift();
+    }
+}, 500);
+
+app.get("/api/telemetry-metrics", (req, res) => {
+    if (requestHistory.length === 0) {
+        return res.json({ latency: 80, errorRate: 0 });
+    }
+    
+    const totalLatency = requestHistory.reduce((sum, r) => sum + r.latency, 0);
+    const avgLatency = Math.round(totalLatency / requestHistory.length);
+    
+    const errorCount = requestHistory.filter(r => r.isError).length;
+    const errorRate = Math.round((errorCount / requestHistory.length) * 100);
+    
+    res.json({ latency: avgLatency, errorRate });
+});
+
 app.get("/api/incidents", (req, res) => {
     if (!activeIncidents) {
         return res.json([]);

@@ -258,30 +258,8 @@
         let currentError = 0;
 
         function updateMetrics(status, severity) {
-            if (status === 'Triggered' || status === 'Analyzing Logs in TEE' || status === 'Classifying Severity' || status === 'Drafting Pull Request' || status === 'Awaiting Approvals') {
-                if (severity === 'HIGH') {
-                    targetLatency = 28400;
-                    targetError = 98.2;
-                } else if (severity === 'LOW') {
-                    targetLatency = 850;
-                    targetError = 5.1;
-                } else {
-                    targetLatency = 12400;
-                    targetError = 78.4;
-                }
-            } else if (status === 'Merging Fix' || status === 'Monitoring Fix') {
-                targetLatency = 150;
-                targetError = 1.2;
-            } else if (status === 'Regression Detected' || status === 'Rolling Back') {
-                targetLatency = 18900;
-                targetError = 80;
-            } else if (status === 'Resolved' || status === 'Rolled Back') {
-                targetLatency = 80;
-                targetError = 0;
-            } else {
-                targetLatency = 80;
-                targetError = 0;
-            }
+            // Overridden by live /api/telemetry-metrics polling
+            return;
         }
 
         function stepTelemetry() {
@@ -708,6 +686,20 @@
         // First load
         initChart();
         setInterval(stepTelemetry, 1000);
+
+        async function fetchTelemetry() {
+            try {
+                const response = await fetch(`/api/telemetry-metrics?_=${Date.now()}`);
+                const data = await response.json();
+                targetLatency = data.latency;
+                targetError = data.errorRate;
+            } catch (e) {
+                console.error("Telemetry fetch error:", e);
+            }
+        }
+        setInterval(fetchTelemetry, 1000);
+        fetchTelemetry();
+
         fetchApprovals();
         fetchLedger();
     </script>
