@@ -1,7 +1,96 @@
-# T.A.C.T. — TEE-Secured Agentic Commander for Triage
-### Real-Time Automated Site Reliability Engineering Secured by Terminal 3 Network (T3N)
+<p align="center">
+  <svg width="100%" height="160" viewBox="0 0 800 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <style>
+      @keyframes pulse {
+        0% { text-shadow: 0 0 8px #0ea5e9, 0 0 15px #0ea5e9, 0 0 25px #8b5cf6; opacity: 0.85; }
+        50% { text-shadow: 0 0 15px #0ea5e9, 0 0 25px #8b5cf6, 0 0 40px #8b5cf6; opacity: 1; }
+        100% { text-shadow: 0 0 8px #0ea5e9, 0 0 15px #0ea5e9, 0 0 25px #8b5cf6; opacity: 0.85; }
+      }
+      @keyframes flow {
+        0% { stroke-dashoffset: 0; }
+        100% { stroke-dashoffset: -100; }
+      }
+      .neon-text {
+        font-family: 'Outfit', 'Segoe UI', system-ui, -apple-system, sans-serif;
+        font-weight: 900;
+        font-size: 42px;
+        fill: #ffffff;
+        animation: pulse 3s infinite ease-in-out;
+      }
+      .sub-text {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 14px;
+        fill: #8b5cf6;
+        letter-spacing: 0.15em;
+      }
+      .badge-text {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10px;
+        fill: #0ea5e9;
+        font-weight: bold;
+      }
+      .border-glow {
+        stroke: url(#cyan-purple-grad);
+        stroke-width: 2;
+        stroke-dasharray: 20 10;
+        animation: flow 4s linear infinite;
+      }
+    </style>
+    <defs>
+      <linearGradient id="cyan-purple-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#0ea5e9" />
+        <stop offset="50%" stop-color="#8b5cf6" />
+        <stop offset="100%" stop-color="#0ea5e9" />
+      </linearGradient>
+      <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+        <feGaussianBlur stdDeviation="6" result="blur" />
+        <feMerge>
+          <feMergeNode in="blur" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+    </defs>
+    <!-- Background border -->
+    <rect x="5" y="5" width="790" height="150" rx="12" fill="#0c0e17" stroke="url(#cyan-purple-grad)" stroke-width="1.5"/>
+    <rect x="10" y="10" width="780" height="140" rx="8" fill="#090a0f" opacity="0.95"/>
+    <!-- Glowing neon lines inside border -->
+    <rect class="border-glow" x="12" y="12" width="776" height="136" rx="6" fill="none" opacity="0.7" />
+    
+    <!-- Glowing Title -->
+    <text x="50%" y="70" text-anchor="middle" class="neon-text" filter="url(#glow)">T. A. C. T.</text>
+    
+    <!-- Subtitle -->
+    <text x="50%" y="105" text-anchor="middle" class="sub-text">TEE-SECURED AGENTIC COMMANDER FOR TRIAGE</text>
+    
+    <!-- Network Status indicator badge -->
+    <g transform="translate(35, 30)">
+      <circle cx="0" cy="0" r="4" fill="#10B981" filter="url(#glow)">
+        <animate attributeName="opacity" values="0.4;1;0.4" dur="2s" repeatCount="indefinite" />
+      </circle>
+      <text x="12" y="3" class="badge-text" fill="#10B981">T3N TESTNET ACTIVE</text>
+    </g>
+    <g transform="translate(630, 30)">
+      <text x="0" y="3" class="badge-text" fill="#0ea5e9">SECURE ENCLAVE ACTIVE</text>
+    </g>
+  </svg>
+</p>
 
----
+<p align="center">
+  <svg width="100%" height="20" viewBox="0 0 800 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M10 10 H790" stroke="url(#cyan-purple-grad-div)" stroke-linecap="round" stroke-width="1.5" />
+    <circle cx="400" cy="10" r="4" fill="#8b5cf6" />
+    <circle cx="400" cy="10" r="1.5" fill="#0ea5e9" />
+    <defs>
+      <linearGradient id="cyan-purple-grad-div" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#0ea5e9" stop-opacity="0" />
+        <stop offset="25%" stop-color="#0ea5e9" />
+        <stop offset="50%" stop-color="#8b5cf6" />
+        <stop offset="75%" stop-color="#0ea5e9" />
+        <stop offset="100%" stop-color="#0ea5e9" stop-opacity="0" />
+      </linearGradient>
+    </defs>
+  </svg>
+</p>
 
 [![Terminal 3 Testnet](https://img.shields.io/badge/T3N_Testnet-Active-success?style=for-the-badge&logo=ethereum&color=10B981)](https://docs.terminal3.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge&color=0EA5E9)](https://opensource.org/licenses/MIT)
@@ -12,13 +101,43 @@
 
 When a production outage alert fires, T.A.C.T. automatically establishes a secure session handshake, triages incident severity, diagnoses logs using **Llama 3.3 (via Groq)**, drafts a patch file, and routes cryptographic EIP-191 approvals to on-call engineers. Merges and rollback actions are securely executed inside a **TEE hardware enclave simulator** and logged permanently onto an **Immutable Cryptographic Audit Ledger**, keeping sensitive keys and PII completely private.
 
----
+<p align="center">
+  <svg width="100%" height="20" viewBox="0 0 800 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M10 10 H790" stroke="url(#cyan-purple-grad-div-1)" stroke-linecap="round" stroke-width="1.5" />
+    <circle cx="400" cy="10" r="4" fill="#8b5cf6" />
+    <circle cx="400" cy="10" r="1.5" fill="#0ea5e9" />
+    <defs>
+      <linearGradient id="cyan-purple-grad-div-1" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#0ea5e9" stop-opacity="0" />
+        <stop offset="25%" stop-color="#0ea5e9" />
+        <stop offset="50%" stop-color="#8b5cf6" />
+        <stop offset="75%" stop-color="#0ea5e9" />
+        <stop offset="100%" stop-color="#0ea5e9" stop-opacity="0" />
+      </linearGradient>
+    </defs>
+  </svg>
+</p>
 
 ## 📽️ Interactive Web Control Center
 T.A.C.T. comes with a premium glassmorphic control center dashboard where you can trigger incidents, sign transactions cryptographically, and inspect live enclave execution logs:
 👉 **[http://localhost:3000](http://localhost:3000)**
 
----
+<p align="center">
+  <svg width="100%" height="20" viewBox="0 0 800 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M10 10 H790" stroke="url(#cyan-purple-grad-div-2)" stroke-linecap="round" stroke-width="1.5" />
+    <circle cx="400" cy="10" r="4" fill="#8b5cf6" />
+    <circle cx="400" cy="10" r="1.5" fill="#0ea5e9" />
+    <defs>
+      <linearGradient id="cyan-purple-grad-div-2" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#0ea5e9" stop-opacity="0" />
+        <stop offset="25%" stop-color="#0ea5e9" />
+        <stop offset="50%" stop-color="#8b5cf6" />
+        <stop offset="75%" stop-color="#0ea5e9" />
+        <stop offset="100%" stop-color="#0ea5e9" stop-opacity="0" />
+      </linearGradient>
+    </defs>
+  </svg>
+</p>
 
 ## 🛠️ System Architecture & Execution Flow
 
@@ -55,7 +174,22 @@ sequenceDiagram
     end
 ```
 
----
+<p align="center">
+  <svg width="100%" height="20" viewBox="0 0 800 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M10 10 H790" stroke="url(#cyan-purple-grad-div-3)" stroke-linecap="round" stroke-width="1.5" />
+    <circle cx="400" cy="10" r="4" fill="#8b5cf6" />
+    <circle cx="400" cy="10" r="1.5" fill="#0ea5e9" />
+    <defs>
+      <linearGradient id="cyan-purple-grad-div-3" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#0ea5e9" stop-opacity="0" />
+        <stop offset="25%" stop-color="#0ea5e9" />
+        <stop offset="50%" stop-color="#8b5cf6" />
+        <stop offset="75%" stop-color="#0ea5e9" />
+        <stop offset="100%" stop-color="#0ea5e9" stop-opacity="0" />
+      </linearGradient>
+    </defs>
+  </svg>
+</p>
 
 ## 🗝️ Terminal 3 SDK Integration Index
 
@@ -86,7 +220,22 @@ Permanently appends immutable transaction steps and audit logs to the T3 `client
 * **SDK Wrapper:** [src/sdk-wrapper/t3-agent.ts#L57](file:///c:/Users/Nevan/Desktop/Starlight/src/sdk-wrapper/t3-agent.ts#L57) (`client.maps.set()`)
 * **Agent Core:** [src/orchestrator/agent-core.ts#L113](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/agent-core.ts#L113) (`await agent.audit.write({ action, actor, incidentId })`)
 
----
+<p align="center">
+  <svg width="100%" height="20" viewBox="0 0 800 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M10 10 H790" stroke="url(#cyan-purple-grad-div-4)" stroke-linecap="round" stroke-width="1.5" />
+    <circle cx="400" cy="10" r="4" fill="#8b5cf6" />
+    <circle cx="400" cy="10" r="1.5" fill="#0ea5e9" />
+    <defs>
+      <linearGradient id="cyan-purple-grad-div-4" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#0ea5e9" stop-opacity="0" />
+        <stop offset="25%" stop-color="#0ea5e9" />
+        <stop offset="50%" stop-color="#8b5cf6" />
+        <stop offset="75%" stop-color="#0ea5e9" />
+        <stop offset="100%" stop-color="#0ea5e9" stop-opacity="0" />
+      </linearGradient>
+    </defs>
+  </svg>
+</p>
 
 ## 📂 Source Code Directory
 
@@ -98,7 +247,22 @@ Permanently appends immutable transaction steps and audit logs to the T3 `client
 * [server.js](file:///c:/Users/Nevan/Desktop/Starlight/server.js) — Express REST controller serving APIs for webhook alert dispatching, ledger audits, and approval signatures.
 * [public/](file:///c:/Users/Nevan/Desktop/Starlight/public/) — Glassmorphic dashboard control center.
 
----
+<p align="center">
+  <svg width="100%" height="20" viewBox="0 0 800 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M10 10 H790" stroke="url(#cyan-purple-grad-div-5)" stroke-linecap="round" stroke-width="1.5" />
+    <circle cx="400" cy="10" r="4" fill="#8b5cf6" />
+    <circle cx="400" cy="10" r="1.5" fill="#0ea5e9" />
+    <defs>
+      <linearGradient id="cyan-purple-grad-div-5" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#0ea5e9" stop-opacity="0" />
+        <stop offset="25%" stop-color="#0ea5e9" />
+        <stop offset="50%" stop-color="#8b5cf6" />
+        <stop offset="75%" stop-color="#0ea5e9" />
+        <stop offset="100%" stop-color="#0ea5e9" stop-opacity="0" />
+      </linearGradient>
+    </defs>
+  </svg>
+</p>
 
 ## 🚀 Installation & Quick Start
 
@@ -139,7 +303,22 @@ npm start
 ```
 Navigate to **[http://localhost:3000](http://localhost:3000)**.
 
----
+<p align="center">
+  <svg width="100%" height="20" viewBox="0 0 800 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M10 10 H790" stroke="url(#cyan-purple-grad-div-6)" stroke-linecap="round" stroke-width="1.5" />
+    <circle cx="400" cy="10" r="4" fill="#8b5cf6" />
+    <circle cx="400" cy="10" r="1.5" fill="#0ea5e9" />
+    <defs>
+      <linearGradient id="cyan-purple-grad-div-6" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#0ea5e9" stop-opacity="0" />
+        <stop offset="25%" stop-color="#0ea5e9" />
+        <stop offset="50%" stop-color="#8b5cf6" />
+        <stop offset="75%" stop-color="#0ea5e9" />
+        <stop offset="100%" stop-color="#0ea5e9" stop-opacity="0" />
+      </linearGradient>
+    </defs>
+  </svg>
+</p>
 
 ## 📡 Real-World APM Webhook Integration
 In a production setting, the webhook endpoint `/api/webhook` is designed to be mapped directly to your live SRE monitoring tools. The server dynamically parses and auto-normalizes incoming payloads from the following formats:
@@ -179,7 +358,22 @@ Hook standard Datadog monitor notifications. The router extracts the service nam
 }
 ```
 
----
+<p align="center">
+  <svg width="100%" height="20" viewBox="0 0 800 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M10 10 H790" stroke="url(#cyan-purple-grad-div-7)" stroke-linecap="round" stroke-width="1.5" />
+    <circle cx="400" cy="10" r="4" fill="#8b5cf6" />
+    <circle cx="400" cy="10" r="1.5" fill="#0ea5e9" />
+    <defs>
+      <linearGradient id="cyan-purple-grad-div-7" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#0ea5e9" stop-opacity="0" />
+        <stop offset="25%" stop-color="#0ea5e9" />
+        <stop offset="50%" stop-color="#8b5cf6" />
+        <stop offset="75%" stop-color="#0ea5e9" />
+        <stop offset="100%" stop-color="#0ea5e9" stop-opacity="0" />
+      </linearGradient>
+    </defs>
+  </svg>
+</p>
 
 ## 🔍 Validation Walkthrough
 
