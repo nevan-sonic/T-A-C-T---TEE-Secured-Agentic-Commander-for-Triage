@@ -4,6 +4,7 @@ import * as path from "path";
 
 const workspaceDir = "c:\\Users\\Nevan\\Desktop\\Starlight";
 const configFilePath = path.join(workspaceDir, "db_config.json");
+const appServiceFilePath = path.join(workspaceDir, "app_service.js");
 
 // Helper to run commands in the local Git workspace
 function runGitCmd(cmd: string): string {
@@ -37,19 +38,30 @@ export function initializeLocalRepo() {
         runGitCmd("git config user.name \"Department of Incidents Bot\"");
         runGitCmd("git config user.email \"incident-bot@terminal3.io\"");
         
-        // Write initial config file
-        const initialConfig = {
-            service_name: "api-gateway",
-            db_host: "localhost",
-            db_port: 5432,
-            pool_size: 20
-        };
-        fs.writeFileSync(configFilePath, JSON.stringify(initialConfig, null, 2));
+        // Write initial app_service.js
+        const defaultAppService = `// Production Gateway Database Connection Pool Init
+const { Pool } = require("pg");
+
+const poolConfig = {
+  host: "localhost",
+  port: 5432,
+  database: "production_db",
+  // Database connection limit
+  max: 20,
+  idleTimeoutMillis: 10000,
+  connectionTimeoutMillis: 2000,
+};
+
+const dbPool = new Pool(poolConfig);
+
+module.exports = { dbPool, poolConfig };
+`;
+        fs.writeFileSync(appServiceFilePath, defaultAppService);
         
-        runGitCmd("git add db_config.json");
-        runGitCmd("git commit -m \"initial commit: setup gateway config\"");
+        runGitCmd("git add app_service.js");
+        runGitCmd("git commit -m \"initial commit: setup gateway service code\"");
         runGitCmd("git branch -M main");
-        console.log("[Git Engine] Initialized repository, renamed default branch to 'main', and committed db_config.json");
+        console.log("[Git Engine] Initialized repository, renamed default branch to 'main', and committed app_service.js");
     } else {
         console.log("[Git Engine] Git repository already exists in workspace.");
         try {
@@ -57,6 +69,18 @@ export function initializeLocalRepo() {
             runGitCmd("git branch -M main");
         } catch (e) {
             // Ignore if no commits are present yet or already main
+        }
+        
+        // Stage and commit app_service.js on main if it's untracked or modified
+        try {
+            runGitCmd("git add app_service.js");
+            const diff = runGitCmd("git diff --cached --name-only");
+            if (diff.includes("app_service.js")) {
+                runGitCmd("git commit -m \"chore: track app_service.js on main\"");
+                console.log("[Git Engine] Committed app_service.js to main branch.");
+            }
+        } catch (e: any) {
+            console.warn(`[Git Engine Warning] Failed to stage/commit app_service.js on main: ${e.message}`);
         }
     }
 }
@@ -91,55 +115,43 @@ export async function createPR(patchContent: string, secureContext: any): Promis
     
     // Apply patch
     try {
-        let patchObj: any = {};
-        
-        // Try parsing patchContent as JSON first
-        try {
-            if (typeof patchContent === "string") {
-                // Remove markdown codeblock formatting if present
-                const cleanPatch = patchContent.replace(/```json/g, "").replace(/```/g, "").trim();
-                patchObj = JSON.parse(cleanPatch);
-            } else {
-                patchObj = patchContent;
-            }
-        } catch (jsonErr) {
-            // If it is a raw text description, try to extract key values (e.g. "pool_size: 50" or "pool_size=50" or "pool_size to 50")
-            console.log(`[Git Engine] Patch content is not JSON. Attempting regex extraction...`);
-            const poolSizeMatch = patchContent.match(/pool_size\s*[:=\s\w]*\s*(\d+)/i) || patchContent.match(/pool\s*size\s*[:=\s\w]*\s*(\d+)/i) || patchContent.match(/pool_size\s*to\s*(\d+)/i);
-            if (poolSizeMatch) {
-                patchObj = { pool_size: parseInt(poolSizeMatch[1], 10) };
-            } else {
-                // Absolute fallback to ensure db_config.json remains valid JSON
-                patchObj = { pool_size: 50 };
-            }
+        let cleanCode = patchContent;
+        if (cleanCode.includes("```")) {
+            const lines = cleanCode.split("\n");
+            const filtered = lines.filter(line => !line.trim().startsWith("```"));
+            cleanCode = filtered.join("\n").trim();
         }
 
-        // Load current config
-        let currentConfig: any = {
-            service_name: "api-gateway",
-            db_host: "localhost",
-            db_port: 5432,
-            pool_size: 20
-        };
-        
-        try {
-            if (fs.existsSync(configFilePath)) {
-                currentConfig = JSON.parse(fs.readFileSync(configFilePath, "utf-8"));
-            }
-        } catch (e) {
-            console.warn("[Git Engine] Existing config file is invalid JSON. Re-initializing base config.");
+        // Validate cleanCode has Pool and max, otherwise use a fallback
+        if (!cleanCode || !cleanCode.includes("Pool") || !cleanCode.includes("max")) {
+            console.warn("[Git Engine] Proposing patch appears invalid. Falling back to default app_service.js fix.");
+            cleanCode = `// Production Gateway Database Connection Pool Init
+const { Pool } = require("pg");
+
+const poolConfig = {
+  host: "localhost",
+  port: 5432,
+  database: "production_db",
+  // Database connection limit
+  max: 50,
+  idleTimeoutMillis: 10000,
+  connectionTimeoutMillis: 2000,
+};
+
+const dbPool = new Pool(poolConfig);
+
+module.exports = { dbPool, poolConfig };
+`;
         }
-        
-        // Merge patch keys
-        const updatedConfig = { ...currentConfig, ...patchObj };
-        fs.writeFileSync(configFilePath, JSON.stringify(updatedConfig, null, 2));
-        console.log(`[Git Engine] Config file updated successfully. Merged keys: ${JSON.stringify(patchObj)}`);
+
+        fs.writeFileSync(appServiceFilePath, cleanCode);
+        console.log("[Git Engine] app_service.js updated successfully with code patch.");
     } catch (e: any) {
-        console.error(`[Git Engine Error] Critical error applying config patch: ${e.message}`);
+        console.error(`[Git Engine Error] Critical error applying code patch: ${e.message}`);
     }
 
     // Commit change
-    runGitCmd("git add db_config.json");
+    runGitCmd("git add app_service.js");
     runGitCmd(`git commit --allow-empty -m "fix(db): increase database pool size to 50"`);
     
     console.log(`[Git Engine] Changes committed locally to branch: ${branchName}`);

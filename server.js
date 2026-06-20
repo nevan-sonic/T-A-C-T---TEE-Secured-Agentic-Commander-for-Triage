@@ -187,12 +187,15 @@ setInterval(async () => {
     let isError = false;
     
     try {
-        // Read pool_size from db_config.json dynamically
-        const configPath = path.join(__dirname, "db_config.json");
+        // Read pool_size from app_service.js dynamically
+        const appServicePath = path.join(__dirname, "app_service.js");
         let poolSize = 20;
-        if (fs.existsSync(configPath)) {
-            const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-            poolSize = config.pool_size || 20;
+        if (fs.existsSync(appServicePath)) {
+            const content = fs.readFileSync(appServicePath, "utf-8");
+            const match = content.match(/max:\s*(\d+)/);
+            if (match) {
+                poolSize = parseInt(match[1], 10);
+            }
         }
         
         if (poolSize < 30) {
