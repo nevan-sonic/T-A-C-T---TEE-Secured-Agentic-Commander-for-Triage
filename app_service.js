@@ -3,7 +3,7 @@ const poolConfig = {
   host: "localhost",
   port: 5432,
   database: "production_db",
-  max: 100,
+  max: 500,
   idleTimeoutMillis: 10000,
   connectionTimeoutMillis: 10000,
 };
