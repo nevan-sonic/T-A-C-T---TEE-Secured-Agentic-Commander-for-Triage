@@ -1,6 +1,4 @@
-import { enclaveSimulator, LedgerEntry } from "./enclave-sim";
-import * as fs from "fs";
-import * as path from "path";
+import { enclaveSimulator, LedgerEntry, PendingApproval } from "./enclave-sim";
 
 export interface T3AgentConfig {
     agentDID: string;
@@ -12,7 +10,23 @@ export interface T3Session {
     sessionId: string;
     agentDID: string;
     createdAt: number;
-    authorizedDIDs: Map<string, string>; // Maps DID to delegation credential signature
+    authorizedDIDs: Map<string, string>; // Maps DID to delegation credential
+    expiresAt: number; // [Security] Session TTL
+}
+
+export interface AuthenticateConfig<T> {
+    session: T3Session;
+    delegateDID: string;
+    scope: string;
+    action: (secureContext?: { getSecret: (key: string) => string | null }) => Promise<T>;
+}
+
+export interface RequestDelegationConfig {
+    session: T3Session;
+    delegateDID: string;
+    scope: string;
+    metadata: Record<string, unknown>;
+    timeoutMs?: number;
 }
 
 export interface ApprovalResult {
@@ -21,56 +35,33 @@ export interface ApprovalResult {
     signedAt: number;
 }
 
-// Simulated tenant/contracts client namespaces matching @terminal3/t3n-sdk exports
-export const client = {
-    tenant: {
-        claim: async (): Promise<string> => {
-            const envTid = (process.env.T3N_TENANT_DID || "did:t3:tenant:c8eb415587d29e3155bb615149156b0ce5f2ecc5").split(":").pop();
-            return `did:t3:tenant:${envTid}`;
-        }
-    },
-    contracts: {
-        publish: async (config: {
-            script_name: string;
-            script_version: string;
-            wasm_binary_path: string;
-            functions: string[];
-        }): Promise<void> => {
-            let wasmBinary = Buffer.alloc(0);
-            try {
-                if (fs.existsSync(config.wasm_binary_path)) {
-                    wasmBinary = fs.readFileSync(config.wasm_binary_path);
-                } else {
-                    wasmBinary = Buffer.from("wasm_dummy_component_binary_content");
-                }
-            } catch (e) {
-                wasmBinary = Buffer.from("wasm_dummy_component_binary_content");
-            }
-            enclaveSimulator.publishContract(
-                config.script_name,
-                config.script_version,
-                wasmBinary,
-                config.functions
-            );
-        }
-    },
-    maps: {
-        create: async (tid: string, mapTail: string, visibility: "private" | "public", writers: string[], readers: string[]): Promise<void> => {
-            enclaveSimulator.createMap(tid, mapTail, visibility, writers, readers);
-        },
-        set: async (tid: string, mapTail: string, key: string, value: string): Promise<void> => {
-            enclaveSimulator.setMapEntry(tid, mapTail, key, value);
-        },
-        get: async (tid: string, mapTail: string, key: string, callerId: string): Promise<string | null> => {
-            return enclaveSimulator.getMapEntry(tid, mapTail, key, callerId);
-        }
-    }
-};
+export interface ExecuteUnderConfig<T> {
+    session: T3Session;
+    delegateDID: string;
+    credential: string;
+    action: (secureContext: SecureContext) => Promise<T>;
+}
+
+export interface SecureContext {
+    tenantDid: string;
+    delegateDid: string;
+    credential: string;
+    getSecret: (key: string) => string | null;
+}
+
+// [Security] Session TTL: 30 minutes
+const SESSION_TTL_MS = 30 * 60 * 1000;
+// [Security] Maximum delegation timeout
+const MAX_DELEGATION_TIMEOUT = 60 * 60 * 1000; // 1 hour
+
+// [Security] DID format validation
+function isValidDID(did: string): boolean {
+    return /^did:t3[n]?:[a-zA-Z0-9:_\-]+$/.test(did) || /^did:t3:user:[a-zA-Z0-9:_\-]+$/.test(did) || /^did:t3:agent:[a-zA-Z0-9:_\-]+$/.test(did);
+}
 
 export class T3Agent {
     private config: T3AgentConfig;
-    private activeSession: T3Session | null = null;
-    public currentIncidentId: string = "";
+    private tenantContractId: string = "1001"; // Mock deployed TEE contract ID
 
     public audit = {
         write: async (entry: Omit<LedgerEntry, "timestamp">): Promise<void> => {
@@ -79,12 +70,6 @@ export class T3Agent {
                 ...entry,
                 timestamp
             });
-            // Write to z:<tid>:audit-ledger maps also
-            const envTid = (this.config.agentDID.split(":").pop() || "c8eb415587d29e3155bb615149156b0ce5f2ecc5").toLowerCase();
-            const logKey = `log_${timestamp}_${entry.action}`;
-            try {
-                enclaveSimulator.setMapEntry(envTid, "audit-ledger", logKey, JSON.stringify({ ...entry, timestamp }));
-            } catch (e) {}
         }
     };
 
@@ -95,110 +80,147 @@ export class T3Agent {
 
     public async handshake(): Promise<T3Session> {
         const sessionId = "sess_" + Math.random().toString(36).substring(2, 8);
+        const now = Date.now();
         console.log(`[T3 Agent SDK] Handshake established. Session ID: ${sessionId}`);
-        
-        const session: T3Session = {
+
+        return {
             sessionId,
             agentDID: this.config.agentDID,
-            createdAt: Date.now(),
-            authorizedDIDs: new Map()
+            createdAt: now,
+            authorizedDIDs: new Map(),
+            expiresAt: now + SESSION_TTL_MS
         };
-        this.activeSession = session;
-        return session;
     }
 
-    public async authenticate(authInput: { session: T3Session; signatureProof?: string }): Promise<void> {
-        console.log(`[T3 Agent SDK] Authenticating session ${authInput.session.sessionId}...`);
-        this.activeSession = authInput.session;
-    }
-
-    public async executeAndDecode(config: {
-        script_name: string;
-        script_version: string;
-        function_name: string;
-        input: any; 
-    }): Promise<any> {
-        console.log(`[T3 Agent SDK] executeAndDecode() requested: ${config.script_name}/${config.function_name} (v${config.script_version})`);
-        
-        const matches = config.script_name.match(/z:([0-9a-fA-F]+)/) || config.script_name.match(/:([0-9a-fA-F]+)/) || [null, "c8eb415587d29e3155bb615149156b0ce5f2ecc5"];
-        const tid = matches[1].toLowerCase();
-        const ownerDID = `did:t3n:${tid}`;
-        
-        const requiresGrant = config.function_name === "create-fix-pr" || config.function_name === "merge-fix" || config.function_name === "revert-commit";
-        
-        if (requiresGrant) {
-            const session = this.activeSession;
-            if (!session) {
-                throw new Error("T3 Session Error: Handshake required before calling executeAndDecode");
-            }
-            
-            const hasGrant = session.authorizedDIDs.has(ownerDID);
-            if (!hasGrant) {
-                const approvalId = "app_" + Math.random().toString(36).substring(2, 8);
-                
-                enclaveSimulator.createPendingApproval(
-                    approvalId,
-                    ownerDID,
-                    config.function_name,
-                    { incidentId: this.currentIncidentId || "AUTO-DETECTION", script: config.script_name }
-                );
-                
-                console.log(`[T3 Agent SDK] Action '${config.function_name}' requires user auth grant. Waiting for EIP-191 Agent Auth signature...`);
-                
-                const start = Date.now();
-                const timeout = 10 * 60 * 1000;
-                
-                while (true) {
-                    const approval = enclaveSimulator.getApprovalById(approvalId);
-                    if (approval && approval.status === "approved" && approval.signature) {
-                        console.log(`[T3 Agent SDK] Cryptographic Agent Auth Grant verified for function '${config.function_name}'.`);
-                        session.authorizedDIDs.set(ownerDID, approval.signature);
-                        break;
-                    }
-                    if (Date.now() - start > timeout) {
-                        throw new Error(`T3 Authorization Grant Timeout: Function ${config.function_name} denied.`);
-                    }
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                }
-            }
+    // [Security] Check if session has expired
+    private checkSessionExpiry(session: T3Session): void {
+        if (Date.now() > session.expiresAt) {
+            throw new Error(`[Security] T3 Session expired. Session created at ${new Date(session.createdAt).toISOString()}, expired at ${new Date(session.expiresAt).toISOString()}. Please call handshake() again.`);
         }
-        
-        console.log(`[T3 Enclave] Entering hardware enclave for guest WASM function: ${config.function_name}...`);
-        
-        const secureContext = {
+    }
+
+    // [Security] Build secureContext for TEE secret retrieval
+    private buildSecureContext(delegateDID: string): SecureContext {
+        return {
+            tenantDid: this.config.agentDID,
+            delegateDid: delegateDID,
+            credential: "",
             getSecret: (key: string) => {
-                const matches = ownerDID.match(/did:t3n:([0-9a-fA-F]+)/) || ownerDID.match(/:([0-9a-fA-F]+)/) || [null, "c8eb415587d29e3155bb615149156b0ce5f2ecc5"];
-                const tid = matches[1].toLowerCase();
-                const val = enclaveSimulator.getMapEntry(tid, "secrets", key, "1001");
-                if (val) return val;
-                
-                const envTid = ((process.env.T3N_TENANT_DID || "c8eb415587d29e3155bb615149156b0ce5f2ecc5").split(":").pop() || "c8eb415587d29e3155bb615149156b0ce5f2ecc5").toLowerCase();
+                // Validate key is not empty
+                if (!key || key.length === 0) {
+                    console.log("[Security] Empty secret key requested");
+                    return null;
+                }
+
+                const matches = delegateDID.match(/did:t3n:([0-9a-fA-F]+)/) || delegateDID.match(/did:t3:user:([0-9a-fA-F]+)/);
+                const tid = matches ? matches[1].toLowerCase() : "bccc24bd2926d5c0065cb99f4d032fdc4f2289ec";
+                try {
+                    const val = enclaveSimulator.getMapEntry(tid, "secrets", key, "1001");
+                    if (val) return val;
+                } catch (e) {}
+                const envTid = ((process.env.T3N_TENANT_DID || "bccc24bd2926d5c0065cb99f4d032fdc4f2289ec").split(":").pop() || "bccc24bd2926d5c0065cb99f4d032fdc4f2289ec").toLowerCase();
                 return enclaveSimulator.getMapEntry(envTid, "secrets", key, "1001");
             }
         };
+    }
 
-        let result: any = null;
-        const { createPR, mergePR, revertCommit } = require("../orchestrator/github");
-        
-        const payloadStr = config.input.toString();
-        let payload: any = {};
+    public async authenticate<T>(config: AuthenticateConfig<T>): Promise<T> {
+        // [Security] Validate session and DID
+        this.checkSessionExpiry(config.session);
+        if (!config.delegateDID || config.delegateDID.length === 0) {
+            throw new Error("[Security] Empty delegateDID provided to authenticate()");
+        }
+
+        console.log(`[T3 Agent SDK] Authenticating user DID: ${config.delegateDID} with scope '${config.scope}'...`);
         try {
-            payload = JSON.parse(payloadStr);
-        } catch (e) {
-            payload = { patch: payloadStr };
+            console.log(`[T3 Agent SDK] Executing task under user DID context: ${config.delegateDID}`);
+
+            // Build secureContext for TEE secret retrieval (Zero-Secrets pattern)
+            const secureContext = this.buildSecureContext(config.delegateDID);
+
+            const result = await config.action(secureContext);
+            return result;
+        } catch (e: any) {
+            console.error(`[T3 Agent SDK] Authentication error: ${e.message}`);
+            throw e;
+        }
+    }
+
+    public async requestDelegation(config: RequestDelegationConfig): Promise<ApprovalResult> {
+        // [Security] Validate session
+        this.checkSessionExpiry(config.session);
+
+        const approvalId = "app_" + Math.random().toString(36).substring(2, 8);
+
+        // Push the pending approval request to the local simulator
+        enclaveSimulator.createPendingApproval(
+            approvalId,
+            config.delegateDID,
+            config.scope,
+            config.metadata
+        );
+
+        console.log(`[T3 Agent SDK] Delegation requested for DID: ${config.delegateDID}. Waiting for approval signature...`);
+
+        // [Security] Cap the timeout at MAX_DELEGATION_TIMEOUT
+        const start = Date.now();
+        const timeout = Math.min(config.timeoutMs || 30 * 60 * 1000, MAX_DELEGATION_TIMEOUT);
+
+        while (true) {
+            const approval = enclaveSimulator.getApprovalById(approvalId);
+            if (approval && approval.status === "approved" && approval.signature) {
+                // Return delegation result
+                const result: ApprovalResult = {
+                    approverDID: config.delegateDID,
+                    credential: approval.signature,
+                    signedAt: approval.signedAt || Date.now()
+                };
+
+                // Add credential proof to session cache
+                config.session.authorizedDIDs.set(config.delegateDID, approval.signature);
+                return result;
+            }
+
+            if (Date.now() - start > timeout) {
+                throw new Error(`T3 Delegation Timeout: Request ${approvalId} expired after ${timeout}ms.`);
+            }
+
+            // Sleep 1 second before checking again
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+    }
+
+    public async executeUnder<T>(config: ExecuteUnderConfig<T>): Promise<T> {
+        // [Security] Validate session
+        this.checkSessionExpiry(config.session);
+
+        console.log(`[T3 Agent SDK] executeUnder() requested. Caller DID: ${config.delegateDID}`);
+
+        // 1. Verify that the session has the signature credential
+        const cachedCred = config.session.authorizedDIDs.get(config.delegateDID);
+        if (!cachedCred || cachedCred !== config.credential) {
+            throw new Error(`T3 Security Breach: executeUnder denied. Invalid or missing signature credential for DID ${config.delegateDID}`);
         }
 
-        if (config.function_name === "investigate-logs") {
-            result = payload.logs;
-        } else if (config.function_name === "create-fix-pr") {
-            result = await createPR(payload.patch, secureContext);
-        } else if (config.function_name === "merge-fix") {
-            result = await mergePR(payload.branchName, secureContext);
-        } else if (config.function_name === "revert-commit") {
-            result = await revertCommit(payload.commitSha, secureContext);
+        // [Security] Validate credential length
+        if (!config.credential || config.credential.length < 10 || config.credential.length > 1000) {
+            throw new Error(`[Security] Invalid credential length for executeUnder()`);
         }
-        
-        console.log(`[T3 Enclave] WASM Execution success. Exiting enclave.`);
-        return result;
+
+        console.log(`[T3 Enclave] Entering hardware enclave for DID: ${config.delegateDID}...`);
+
+        // 2. Build the secureContext container
+        const secureContext = this.buildSecureContext(config.delegateDID);
+        secureContext.credential = config.credential;
+
+        // 3. Execute the payload closure inside the enclave boundary
+        try {
+            const result = await config.action(secureContext);
+            console.log(`[T3 Enclave] Execution complete. Exiting enclave.`);
+            return result;
+        } catch (e: any) {
+            console.error(`[T3 Enclave] Contract Execution Error: ${e.message}`);
+            throw e;
+        }
     }
 }

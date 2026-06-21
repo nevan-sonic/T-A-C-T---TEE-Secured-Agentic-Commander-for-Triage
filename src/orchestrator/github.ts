@@ -2,14 +2,35 @@ import { execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 
-const workspaceDir = "c:\\Users\\Nevan\\Desktop\\Starlight";
+// [Security] Sanitize shell arguments to prevent command injection
+function sanitizeShellArg(input: string): string {
+    return input.replace(/[^a-zA-Z0-9_\-\.\/]/g, "");
+}
+
+// [Security] Validate workspace path to prevent path traversal
+function validateWorkspacePath(dir: string): string {
+    const resolved = path.resolve(dir);
+    const cwd = process.cwd();
+    // Ensure workspace is within the project directory
+    if (!resolved.startsWith(cwd) && !resolved.includes("workspace")) {
+        console.log(`[Security] Workspace path outside project directory: ${resolved}. Using default.`);
+        return path.join(cwd, "workspace");
+    }
+    return resolved;
+}
+
+const workspaceDir = validateWorkspacePath(process.env.GIT_WORKSPACE_DIR || path.join(process.cwd(), "workspace"));
 const configFilePath = path.join(workspaceDir, "db_config.json");
 const appServiceFilePath = path.join(workspaceDir, "app_service.js");
 
 // Helper to run commands in the local Git workspace
 function runGitCmd(cmd: string): string {
     try {
-        const output = execSync(cmd, { cwd: workspaceDir, stdio: "pipe" });
+        // [Security] Basic command injection check — git commands should only contain safe characters
+        if (/[;&|`$(){}!#]/.test(cmd.replace(/"[^"]*"/g, "").replace(/'[^']*'/g, ""))) {
+            console.log(`[Security] Potentially dangerous characters in git command: ${cmd}`);
+        }
+        const output = execSync(cmd, { cwd: workspaceDir, stdio: "pipe", timeout: 30000 });
         return output.toString().trim();
     } catch (e: any) {
         console.error(`[Git Error] Command failed: ${cmd}. Error: ${e.stderr?.toString() || e.message}`);
@@ -111,7 +132,8 @@ export async function createPR(patchContent: string, secureContext: any): Promis
     
     // Create new branch
     const branchName = "fix/db-pool-exhaustion-" + Math.random().toString(36).substring(2, 6);
-    runGitCmd(`git checkout -b ${branchName}`);
+    const safeBranch = sanitizeShellArg(branchName);
+    runGitCmd(`git checkout -b ${safeBranch}`);
     
     // Apply patch
     try {

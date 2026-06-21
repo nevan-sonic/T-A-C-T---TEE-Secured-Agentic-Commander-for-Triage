@@ -77,6 +77,31 @@
                 </div>
 
                 <button class="action-btn trigger-btn" onclick="triggerAlert()">TRIGGER APM ALERT</button>
+
+                <h3 style="margin-top: 1.5rem; margin-bottom: 0.5rem; font-size: 0.85rem; color: rgba(255,255,255,0.6);">NEW TRIGGERS</h3>
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <button class="scenario-btn" style="flex:1; min-width: 120px;" onclick="triggerCVE()">
+                        <div class="btn-indicator" style="background: #f59e0b;"></div>
+                        <div class="btn-label">
+                            <h3 style="font-size: 0.8rem;">🛡️ CVE Webhook</h3>
+                            <p style="font-size: 0.65rem;">GitHub Dependabot Auto-Patch</p>
+                        </div>
+                    </button>
+                    <button class="scenario-btn" style="flex:1; min-width: 120px;" onclick="triggerRunbook()">
+                        <div class="btn-indicator" style="background: #8b5cf6;"></div>
+                        <div class="btn-label">
+                            <h3 style="font-size: 0.8rem;">📋 Runbook</h3>
+                            <p style="font-size: 0.65rem;">PagerDuty Step Execution</p>
+                        </div>
+                    </button>
+                    <button class="scenario-btn" style="flex:1; min-width: 120px;" onclick="triggerCost()">
+                        <div class="btn-indicator" style="background: #10b981;"></div>
+                        <div class="btn-label">
+                            <h3 style="font-size: 0.8rem;">💰 Cost Anomaly</h3>
+                            <p style="font-size: 0.65rem;">AWS CloudWatch Remediation</p>
+                        </div>
+                    </button>
+                </div>
             </div>
 
             <!-- Column 2: Live Telemetry Graph -->
@@ -291,7 +316,7 @@
         }
 
         // Mocks for DIDs matches the .env config
-        let AliceDID = "did:t3n:c8eb415587d29e3155bb615149156b0ce5f2ecc5"; // Matches user private key address
+        let AliceDID = "did:t3n:bCcC24bD2926D5C0065Cb99F4d032FDc4f2289ec"; // Matches user private key address
         const BobDID = "did:t3:user:bob";
         const CharlieDID = "did:t3:user:charlie";
 
@@ -550,7 +575,7 @@
                             <p><strong>Requested Scope:</strong> <code>${app.scope}</code></p>
                         </div>
                         <div class="approval-actions">
-                            <button class="action-btn approve-btn" onclick="signApproval('${app.id}', '${app.approverDID}', '${app.scope}')">Confirm & Sign with T3 Identity</button>
+                            <button class="action-btn approve-btn" onclick="signApproval('${app.id}', '${app.approverDID}')">Confirm & Sign with T3 Identity</button>
                         </div>
                     </div>
                 `).join('');
@@ -559,14 +584,10 @@
             }
         }
 
-        async function signApproval(id, approverDID, scope) {
+        async function signApproval(id, approverDID) {
             appendTerminalLog(`Initiating EIP-191 Personal Sign signature challenge for approval: ${id}...`, 'system');
             
-            const matches = approverDID.match(/did:t3n:([0-9a-fA-F]+)/) || approverDID.match(/did:t3:user:([0-9a-fA-F]+)/) || approverDID.match(/did:t3:user:(\w+)/);
-            const expectedAddressHex = matches ? matches[1] : 'c8eb415587d29e3155bb615149156b0ce5f2ecc5';
-            const tid = expectedAddressHex.toLowerCase();
-            const message = `T3 Agent Authorization Grant\nAgent DID: did:t3:agent:department-of-incidents\nContract: z:${tid}:incident-contracts\nFunction: ${scope}\nOutbound Hosts: api.github.com\nApproval ID: ${id}`;
-            
+            const message = `T3 Agent Authorization Grant\nAgent DID: did:t3:agent:department-of-incidents\nContract: z:system:incident-contracts\nFunction: incident-${id}\nApproval ID: ${id}`;
             let signature = '';
             
             // Check for metamask connection
@@ -586,9 +607,9 @@
             if (!signature) {
                 try {
                     // Use a mock wallet constructed from Alice's private key in .env
-                    // Address: 0xc8eb415587d29e3155bb615149156b0ce5f2ecc5
-                    // Private Key: 0x616355559f3b9880cf878749d4d8b42f5b7c9147552ce03793de353f9d3ef00d
-                    const privateKey = "0x616355559f3b9880cf878749d4d8b42f5b7c9147552ce03793de353f9d3ef00d";
+                    // Address: 0xbCcC24bD2926D5C0065Cb99F4d032FDc4f2289ec
+                    // Private Key: 0x518112b612270210c5a6b6354f8292979d559fe8075bb045930ddedd34749f4d
+                    const privateKey = "0x518112b612270210c5a6b6354f8292979d559fe8075bb045930ddedd34749f4d";
                     const wallet = new ethers.Wallet(privateKey);
                     
                     appendTerminalLog(`Signing message locally for address: ${wallet.address}`, "info");
@@ -658,6 +679,16 @@
                         const sevClass = inc.severity ? inc.severity.toLowerCase() : 'medium';
                         const severityBadge = `<span class="severity-badge ${sevClass}">${inc.severity || 'MEDIUM'}</span>`;
                         
+                        // Auto-detect badge and resolution time
+                        const autoBadge = inc.autoMode ? '<span style="background:rgba(0,200,150,0.15); color:#00c896; padding:0.15rem 0.4rem; border-radius:4px; font-size:0.7rem; font-weight:700; margin-left:4px;" title="Auto-detected by traffic monitor">🤖 AUTO</span>' : '';
+                        let resolutionTime = '';
+                        if (inc.triggeredTime && (inc.resolvedTime || inc.rolledBackTime)) {
+                            const endTime = inc.resolvedTime || inc.rolledBackTime;
+                            const sec = ((endTime - inc.triggeredTime) / 1000).toFixed(1);
+                            resolutionTime = `<br><span style="font-size:0.65rem; color:hsl(215,20%,50%);">Resolved in ${sec}s</span>`;
+                        }
+                        const scoreBadge = inc.patchScore != null ? `<span style="font-size:0.65rem; color:${inc.patchScore >= 70 ? '#00c896' : '#ff6b6b'};">Score: ${inc.patchScore}/100</span>` : '';
+                        
                         let prAction = 'N/A';
                         if (inc.prUrl) {
                             const prNum = inc.prNumber || inc.prUrl.split('/').pop();
@@ -676,12 +707,17 @@
                             rollbackAction = `<span style="color: hsl(215, 20%, 50%); font-style: italic;">${inc.status}</span>`;
                         }
                         
+                        // Trigger type badge
+                        const triggerBadge = inc.triggerType ? `<span style="font-size:0.6rem; background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.6); padding:0.1rem 0.3rem; border-radius:3px; display:inline-block; margin-top:2px;">${inc.triggerType}</span>` : '';
+                        const costBadge = inc.costSaving != null ? `<br><span style="font-size:0.65rem; color:#10b981;">💰 Saved $${inc.costSaving}</span>` : '';
+                        const runbookBadge = inc.runbookStepsCount != null ? `<br><span style="font-size:0.65rem; color:#8b5cf6;">📋 ${inc.runbookStepsCount} steps</span>` : '';
+
                         return `
                             <tr>
-                                <td style="font-family:'JetBrains Mono', monospace; font-size:0.8rem; font-weight:700;">${inc.id}</td>
+                                <td style="font-family:'JetBrains Mono', monospace; font-size:0.8rem; font-weight:700;">${inc.id}${autoBadge}${triggerBadge ? '<br>' + triggerBadge : ''}</td>
                                 <td><code>${inc.service}</code></td>
-                                <td>${severityBadge}</td>
-                                <td><span class="status-badge-inline">${inc.status}</span></td>
+                                <td>${severityBadge}${scoreBadge ? '<br>' + scoreBadge : ''}${costBadge}${runbookBadge}</td>
+                                <td><span class="status-badge-inline">${inc.status}</span>${resolutionTime}</td>
                                 <td>${prAction}</td>
                                 <td>${rollbackAction}</td>
                             </tr>
@@ -741,6 +777,92 @@
 
         fetchApprovals();
         fetchLedger();
+
+        // ============================================================
+        // New Trigger Functions
+        // ============================================================
+
+        async function triggerCVE() {
+            const payload = {
+                type: "cve_manual",
+                cveId: "CVE-2024-29041",
+                severity: "high",
+                package: "express",
+                currentVersion: "4.18.2",
+                fixedVersion: "4.19.2",
+                affectedFile: "package.json",
+                description: "Express.js open redirect vulnerability allows attackers to redirect users to malicious sites via crafted URL parameters."
+            };
+            appendTerminalLog("Dispatching CVE webhook payload...", "system");
+            try {
+                const response = await fetch('/api/github-webhook', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                appendTerminalLog(`CVE remediation started: ${result.status} (${result.cveId})`, 'success');
+            } catch (err) {
+                appendTerminalLog(`CVE webhook failed: ${err.message}`, 'error');
+            }
+        }
+
+        async function triggerRunbook() {
+            const payload = {
+                type: "runbook_manual",
+                incidentId: "RB-TEST-001",
+                title: "High database memory on db-replica-02",
+                severity: "high",
+                service: "database-service",
+                runbookSteps: [
+                    "Check current memory usage: free -h",
+                    "Identify top memory consumers: ps aux --sort=-%mem | head -20",
+                    "Restart PostgreSQL replica: sudo systemctl restart postgresql-replica",
+                    "Verify replication lag: psql -c 'SELECT now() - pg_last_xact_replay_timestamp()'",
+                    "Check connection pool status: ss -s"
+                ]
+            };
+            appendTerminalLog("Dispatching PagerDuty runbook payload...", "system");
+            try {
+                const response = await fetch('/api/pagerduty-webhook', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                appendTerminalLog(`Runbook execution started: ${result.status} (${result.id})`, 'success');
+            } catch (err) {
+                appendTerminalLog(`Runbook webhook failed: ${err.message}`, 'error');
+            }
+        }
+
+        async function triggerCost() {
+            const payload = {
+                type: "cost_anomaly",
+                alarmName: "DailyCostAnomaly",
+                currentSpend: 2847,
+                threshold: 1200,
+                percentageIncrease: 137,
+                currency: "USD",
+                topResourceBySpend: [
+                    { service: "Amazon EC2", cost: 1840, resourceId: "i-0abc123def456789" },
+                    { service: "Amazon RDS", cost: 680, resourceId: "db-instance-prod-01" },
+                    { service: "Amazon S3", cost: 327, resourceId: "bucket-ml-training-data" }
+                ]
+            };
+            appendTerminalLog("Dispatching CloudWatch cost anomaly payload...", "system");
+            try {
+                const response = await fetch('/api/cloudwatch-webhook', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                appendTerminalLog(`Cost remediation started: ${result.status} (${result.id})`, 'success');
+            } catch (err) {
+                appendTerminalLog(`Cost webhook failed: ${err.message}`, 'error');
+            }
+        }
     </script>
 </body>
 </html>

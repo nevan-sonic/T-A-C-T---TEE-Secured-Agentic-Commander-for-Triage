@@ -1,5 +1,4 @@
 import { T3Session, ApprovalResult } from "../sdk-wrapper/t3-agent";
-import { enclaveSimulator } from "../sdk-wrapper/enclave-sim";
 import { agent } from "./agent-core";
 
 export async function requestApprovals(
@@ -9,46 +8,19 @@ export async function requestApprovals(
 ): Promise<ApprovalResult[]> {
     console.log(`[Incident Guard] Routing approvals for incident ${incidentId} to: ${JSON.stringify(approverDIDs)}`);
     
-    const results: ApprovalResult[] = [];
+    const approvalPromises = approverDIDs.map(did =>
+        agent.requestDelegation({
+            session,
+            delegateDID: did,
+            scope: "repo:merge",
+            metadata: { incidentId, requestedAt: Date.now() },
+            // Blocks until engineer approves in UI
+            timeoutMs: 30 * 60 * 1000,
+        })
+    );
     
-    for (const did of approverDIDs) {
-        const approvalId = "app_" + Math.random().toString(36).substring(2, 8);
-        
-        // Scope is merge-fix for regular approvals
-        enclaveSimulator.createPendingApproval(
-            approvalId,
-            did,
-            "merge-fix",
-            { incidentId, requestedAt: Date.now() }
-        );
-        
-        console.log(`[Incident Guard] Awaiting cryptographic signature from ${did}...`);
-        
-        const start = Date.now();
-        const timeout = 30 * 60 * 1000;
-        let signature = "";
-        let signedAt = Date.now();
-        
-        while (true) {
-            const approval = enclaveSimulator.getApprovalById(approvalId);
-            if (approval && approval.status === "approved" && approval.signature) {
-                signature = approval.signature;
-                signedAt = approval.signedAt || Date.now();
-                session.authorizedDIDs.set(did, signature);
-                break;
-            }
-            if (Date.now() - start > timeout) {
-                throw new Error(`Timeout waiting for approval from ${did}`);
-            }
-            await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-        
-        results.push({
-            approverDID: did,
-            credential: signature,
-            signedAt
-        });
-    }
+    // Wait for ALL required approvals (HIGH = both must sign)
+    const results = await Promise.all(approvalPromises);
     
     // Log each approval to audit ledger
     for (const result of results) {

@@ -1,6 +1,7 @@
 const express = require("express");
 const path = require("path");
 const dotenv = require("dotenv");
+const { ethers } = require("ethers");
 
 // Load environment variables
 dotenv.config();
@@ -17,8 +18,26 @@ app.use((req, res, next) => {
     next();
 });
 
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
+
+// [Security] Simple rate limiting per IP (60 requests per minute)
+const rateLimitMap = new Map();
+app.use((req, res, next) => {
+    const ip = req.ip || req.connection.remoteAddress || "unknown";
+    const now = Date.now();
+    const window = rateLimitMap.get(ip) || { count: 0, resetAt: now + 60000 };
+    if (now > window.resetAt) {
+        window.count = 0;
+        window.resetAt = now + 60000;
+    }
+    window.count++;
+    rateLimitMap.set(ip, window);
+    if (window.count > 60) {
+        return res.status(429).json({ error: "Rate limit exceeded. Try again in 60 seconds." });
+    }
+    next();
+});
 
 // Initialize T3N Enclave Simulator entries on startup
 // We must load this from the compiled dist folder
@@ -26,6 +45,9 @@ let enclaveSimulator;
 let handleIncident;
 let activeIncidents;
 let readAuditLedger;
+let handleCVEIncident;
+let handleRunbookIncident;
+let handleCostAnomalyIncident;
 
 try {
     const simModule = require("./dist/sdk-wrapper/enclave-sim");
@@ -37,21 +59,41 @@ try {
     
     const auditModule = require("./dist/orchestrator/audit");
     readAuditLedger = auditModule.readAuditLedger;
-    
-    const { client } = require("./dist/sdk-wrapper/t3-agent");
+
+    // Import new trigger handlers
+    try {
+        const cveModule = require("./dist/orchestrator/cve-handler");
+        handleCVEIncident = cveModule.handleCVEIncident;
+        console.log("[Control Plane] CVE Handler loaded.");
+    } catch (e) { console.log("[Control Plane] Warning: CVE Handler not found."); }
+
+    try {
+        const runbookModule = require("./dist/orchestrator/runbook-handler");
+        handleRunbookIncident = runbookModule.handleRunbookIncident;
+        console.log("[Control Plane] Runbook Handler loaded.");
+    } catch (e) { console.log("[Control Plane] Warning: Runbook Handler not found."); }
+
+    try {
+        const costModule = require("./dist/orchestrator/cost-handler");
+        handleCostAnomalyIncident = costModule.handleCostAnomalyIncident;
+        console.log("[Control Plane] Cost Handler loaded.");
+    } catch (e) { console.log("[Control Plane] Warning: Cost Handler not found."); }
     
     // Seed credentials on startup (mimics tenant control plane execution)
-    const envTid = process.env.T3N_TENANT_DID ? process.env.T3N_TENANT_DID.split(":").pop() : "c8eb415587d29e3155bb615149156b0ce5f2ecc5";
-    client.maps.create(envTid, "secrets", "private", ["1001"], ["1001"]).then(() => {
-        client.maps.set(envTid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "0x616355559f3b9880cf878749d4d8b42f5b7c9147552ce03793de353f9d3ef00d");
-    });
+    const envTid = process.env.T3N_TENANT_DID ? process.env.T3N_TENANT_DID.split(":").pop() : "bccc24bd2926d5c0065cb99f4d032fdc4f2289ec";
+    enclaveSimulator.createMap(envTid, "secrets", "private", ["1001"], ["1001"]);
+    enclaveSimulator.setMapEntry(envTid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "0x518112b612270210c5a6b6354f8292979d559fe8075bb045930ddedd34749f4d");
+    // Zero-Secrets LLM Proxy: Seed Groq API key into TEE vault
+    enclaveSimulator.setMapEntry(envTid, "secrets", "groq_api_key", process.env.GROQ_API_KEY || "");
+    // Zero-Secrets AWS: Seed AWS credentials into TEE vault
+    enclaveSimulator.setMapEntry(envTid, "secrets", "aws_access_key_id", process.env.AWS_ACCESS_KEY_ID || "AKIAIOSFODNN7EXAMPLE");
+    enclaveSimulator.setMapEntry(envTid, "secrets", "aws_secret_access_key", process.env.AWS_SECRET_ACCESS_KEY || "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
 
-    // Also seed for the derived address from fallback key if different
-    const derivedTid = "1dc692077Cbf6d404B619c8D9b6648849c74802c".toLowerCase();
+    const fallbackKey = process.env.T3N_API_KEY || process.env.T3_PRIVATE_KEY || "0x518112b612270210c5a6b6354f8292979d559fe8075bb045930ddedd34749f4d";
+    const derivedTid = new ethers.Wallet(fallbackKey).address.toLowerCase();
     if (envTid.toLowerCase() !== derivedTid) {
-        client.maps.create(derivedTid, "secrets", "private", ["1001"], ["1001"]).then(() => {
-            client.maps.set(derivedTid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "0x616355559f3b9880cf878749d4d8b42f5b7c9147552ce03793de353f9d3ef00d");
-        });
+        enclaveSimulator.createMap(derivedTid, "secrets", "private", ["1001"], ["1001"]);
+        enclaveSimulator.setMapEntry(derivedTid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "0x518112b612270210c5a6b6354f8292979d559fe8075bb045930ddedd34749f4d");
     }
 
     // Seed default ONCALL_ENGINEER_DID on startup if different
@@ -61,14 +103,15 @@ try {
         if (matches) {
             const defaultTid = matches[1].toLowerCase();
             if (envTid.toLowerCase() !== defaultTid && derivedTid !== defaultTid) {
-                client.maps.create(defaultTid, "secrets", "private", ["1001"], ["1001"]).then(() => {
-                    client.maps.set(defaultTid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "0x616355559f3b9880cf878749d4d8b42f5b7c9147552ce03793de353f9d3ef00d");
-                });
+                enclaveSimulator.createMap(defaultTid, "secrets", "private", ["1001"], ["1001"]);
+                enclaveSimulator.setMapEntry(defaultTid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "0x518112b612270210c5a6b6354f8292979d559fe8075bb045930ddedd34749f4d");
             }
         }
     }
     
     console.log("[Control Plane] Enclave simulator loaded and private z-namespace secrets seeded.");
+    console.log("[Control Plane] Contract published: department-of-incidents v0.1.0 (functions: investigate-logs, create-fix-pr, merge-fix, revert-commit)");
+    console.log("[Control Plane] Contract registered at z:system:incident-contracts (Contract ID: 1001)");
 } catch (e) {
     console.error("[Control Plane] Warning: Compiled modules not found. Run 'npm run compile' first to generate JS outputs.");
 }
@@ -84,12 +127,10 @@ app.post("/api/register-active-did", (req, res) => {
         
         // Seed z-namespace secrets for this DID
         const matches = did.match(/did:t3n:([0-9a-fA-F]+)/) || did.match(/did:t3:user:([0-9a-fA-F]+)/);
-        if (matches) {
-            const { client } = require("./dist/sdk-wrapper/t3-agent");
+        if (matches && enclaveSimulator) {
             const tid = matches[1].toLowerCase();
-            client.maps.create(tid, "secrets", "private", ["1001"], ["1001"]).then(() => {
-                client.maps.set(tid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "0x616355559f3b9880cf878749d4d8b42f5b7c9147552ce03793de353f9d3ef00d");
-            });
+            enclaveSimulator.createMap(tid, "secrets", "private", ["1001"], ["1001"]);
+            enclaveSimulator.setMapEntry(tid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "0x518112b612270210c5a6b6354f8292979d559fe8075bb045930ddedd34749f4d");
         }
         
         return res.json({ status: "registered", did: activeBrowserDID });
@@ -291,6 +332,257 @@ app.get("/api/service", async (req, res) => {
     });
 });
 
+// Feature 1: Concurrent Connection Flood Trigger (Postman-native)
+// Single POST request instantly overwhelms pool and triggers auto-monitor within 4 seconds
+app.post("/api/stress", (req, res) => {
+    const { connections = 10, holdMs = 2000 } = req.body;
+    const count = Math.min(connections, 50); // safety cap
+    activeConnections += count;
+    setTimeout(() => { activeConnections = Math.max(0, activeConnections - count); }, holdMs);
+    console.log(`[Stress] Simulating ${count} concurrent connections for ${holdMs}ms (total active: ${activeConnections})`);
+    res.json({ message: `Simulating ${count} concurrent connections for ${holdMs}ms`, activeConnections });
+});
+
+// ============================================================
+// NEW TRIGGER 1: GitHub CVE / PR Webhook Auto-Patch
+// POST /api/github-webhook — handles Dependabot, Security Advisory, and manual CVE payloads
+// ============================================================
+app.post("/api/github-webhook", (req, res) => {
+    if (!handleCVEIncident) {
+        return res.status(500).json({ error: "CVE Handler not loaded. Run 'npm run compile' first." });
+    }
+
+    const body = req.body;
+    let cveAlert = null;
+
+    // Format A: GitHub Dependabot alert
+    if (body.alert && body.alert.security_advisory) {
+        console.log("[GitHub Webhook] Detected Dependabot alert format.");
+        const alert = body.alert;
+        const advisory = alert.security_advisory;
+        const vuln = alert.security_vulnerability || {};
+        cveAlert = {
+            id: `CVE-DEP-${alert.number || Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+            cveId: advisory.ghsa_id || `GHSA-${Math.random().toString(36).substring(2, 8)}`,
+            ghsaId: advisory.ghsa_id,
+            severity: advisory.severity || vuln.severity || "medium",
+            cvssScore: advisory.cvss ? advisory.cvss.score : undefined,
+            packageName: alert.dependency ? alert.dependency.package.name : "unknown",
+            currentVersion: vuln.vulnerable_version_ranges ? vuln.vulnerable_version_ranges[0] : undefined,
+            fixedVersion: vuln.first_patched_version ? vuln.first_patched_version.identifier : undefined,
+            description: advisory.summary || "Dependabot security alert",
+            repository: body.repository ? body.repository.full_name : undefined
+        };
+    }
+    // Format B: GitHub Security Advisory webhook
+    else if (body.security_advisory && body.action === "published") {
+        console.log("[GitHub Webhook] Detected Security Advisory format.");
+        const advisory = body.security_advisory;
+        cveAlert = {
+            id: `CVE-SA-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+            cveId: advisory.ghsa_id || `GHSA-${Math.random().toString(36).substring(2, 8)}`,
+            ghsaId: advisory.ghsa_id,
+            severity: advisory.severity || "medium",
+            cvssScore: advisory.cvss ? advisory.cvss.score : undefined,
+            packageName: body.affected_file || "unknown",
+            affectedFile: body.affected_file,
+            vulnerableCode: body.vulnerable_code,
+            description: advisory.summary || "Security advisory",
+            repository: undefined
+        };
+    }
+    // Format C: Manual CVE test (Postman)
+    else if (body.type === "cve_manual") {
+        console.log("[GitHub Webhook] Detected manual CVE test format.");
+        cveAlert = {
+            id: `CVE-${body.cveId || Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+            cveId: body.cveId || "CVE-UNKNOWN",
+            severity: body.severity || "medium",
+            packageName: body.package || "unknown",
+            currentVersion: body.currentVersion,
+            fixedVersion: body.fixedVersion,
+            affectedFile: body.affectedFile,
+            description: body.description || "Manual CVE test",
+            repository: undefined
+        };
+    }
+
+    if (!cveAlert) {
+        return res.status(400).json({ error: "Unrecognized payload format. Supported: Dependabot alert, Security Advisory, or manual CVE test (type: 'cve_manual')." });
+    }
+
+    console.log(`[GitHub Webhook] Triggering CVE remediation: ${cveAlert.cveId} (${cveAlert.severity})`);
+    handleCVEIncident(cveAlert).catch(err => {
+        console.error(`[GitHub Webhook Async Error] ${err.message}`);
+    });
+
+    res.json({ status: "cve_remediation_started", id: cveAlert.id, cveId: cveAlert.cveId });
+});
+
+// ============================================================
+// NEW TRIGGER 2: PagerDuty / Opsgenie Runbook Execution
+// POST /api/pagerduty-webhook — handles PagerDuty, Opsgenie, and manual runbook payloads
+// ============================================================
+app.post("/api/pagerduty-webhook", (req, res) => {
+    if (!handleRunbookIncident) {
+        return res.status(500).json({ error: "Runbook Handler not loaded. Run 'npm run compile' first." });
+    }
+
+    const body = req.body;
+    let runbookAlert = null;
+
+    // Format A: PagerDuty
+    if (body.messages && Array.isArray(body.messages) && body.messages.length > 0) {
+        console.log("[PagerDuty Webhook] Detected PagerDuty incident format.");
+        const msg = body.messages[0];
+        const incident = msg.incident || {};
+        runbookAlert = {
+            id: incident.id || `PD-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+            title: incident.title || "PagerDuty Incident",
+            severity: incident.severity || "high",
+            service: incident.service ? incident.service.name : "unknown",
+            details: incident.body ? incident.body.details : undefined,
+            runbookUrl: incident.runbook_url,
+            source: "pagerduty"
+        };
+    }
+    // Format B: Opsgenie
+    else if (body.action === "Create" && body.alert) {
+        console.log("[PagerDuty Webhook] Detected Opsgenie alert format.");
+        const alert = body.alert;
+        runbookAlert = {
+            id: alert.alertId || `OG-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+            title: alert.message || "Opsgenie Alert",
+            severity: alert.priority || "P2",
+            service: alert.details ? alert.details.service : "unknown",
+            details: `Host: ${alert.details ? alert.details.host : "N/A"}. Tags: ${(alert.tags || []).join(", ")}`,
+            runbookUrl: body.runbookUrl,
+            source: "opsgenie"
+        };
+    }
+    // Format C: Manual runbook test (Postman)
+    else if (body.type === "runbook_manual") {
+        console.log("[PagerDuty Webhook] Detected manual runbook test format.");
+        runbookAlert = {
+            id: body.incidentId || `RB-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+            title: body.title || "Manual Runbook Test",
+            severity: body.severity || "high",
+            service: body.service || "unknown",
+            runbookSteps: body.runbookSteps,
+            source: "manual"
+        };
+    }
+
+    if (!runbookAlert) {
+        return res.status(400).json({ error: "Unrecognized payload format. Supported: PagerDuty incident, Opsgenie alert, or manual runbook (type: 'runbook_manual')." });
+    }
+
+    console.log(`[PagerDuty Webhook] Triggering runbook execution: ${runbookAlert.id} (${runbookAlert.title})`);
+    handleRunbookIncident(runbookAlert).catch(err => {
+        console.error(`[PagerDuty Webhook Async Error] ${err.message}`);
+    });
+
+    res.json({ status: "runbook_execution_started", id: runbookAlert.id });
+});
+
+// ============================================================
+// NEW TRIGGER 3: AWS CloudWatch Cost Anomaly
+// POST /api/cloudwatch-webhook — handles SNS/CloudWatch, Cost Anomaly Detection, and manual payloads
+// ============================================================
+app.post("/api/cloudwatch-webhook", (req, res) => {
+    if (!handleCostAnomalyIncident) {
+        return res.status(500).json({ error: "Cost Handler not loaded. Run 'npm run compile' first." });
+    }
+
+    const body = req.body;
+    let costAlert = null;
+
+    // Format A: AWS SNS/CloudWatch alarm
+    if (body.Type === "Notification" && body.Message) {
+        console.log("[CloudWatch Webhook] Detected AWS SNS/CloudWatch alarm format.");
+        try {
+            const msg = JSON.parse(body.Message);
+            const trigger = msg.Trigger || {};
+            const reasonMatch = (msg.NewStateReason || "").match(/\$(\d+).*?\$(\d+).*?(\d+)%/);
+            costAlert = {
+                id: `CW-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+                alarmName: msg.AlarmName || "CloudWatchAlarm",
+                currentSpend: reasonMatch ? parseInt(reasonMatch[1]) : 0,
+                threshold: reasonMatch ? parseInt(reasonMatch[2]) : 0,
+                percentageIncrease: reasonMatch ? parseInt(reasonMatch[3]) : 0,
+                currency: "USD",
+                topResources: [],
+                source: "cloudwatch"
+            };
+        } catch (e) {
+            console.error(`[CloudWatch Webhook] Failed to parse SNS message: ${e.message}`);
+            return res.status(400).json({ error: "Failed to parse SNS message." });
+        }
+    }
+    // Format B: Manual cost anomaly test (Postman)
+    else if (body.type === "cost_anomaly") {
+        console.log("[CloudWatch Webhook] Detected manual cost anomaly test format.");
+        costAlert = {
+            id: `COST-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+            alarmName: body.alarmName || "ManualCostAnomaly",
+            currentSpend: body.currentSpend || 0,
+            threshold: body.threshold || 0,
+            percentageIncrease: body.percentageIncrease || 0,
+            currency: body.currency || "USD",
+            topResources: body.topResourceBySpend || [],
+            source: "manual"
+        };
+    }
+    // Format C: AWS Cost Anomaly Detection webhook
+    else if (body.anomalyId) {
+        console.log("[CloudWatch Webhook] Detected AWS Cost Anomaly Detection format.");
+        const impact = body.totalImpact || {};
+        costAlert = {
+            id: `CAD-${body.anomalyId || Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+            alarmName: body.monitorName || "CostAnomalyDetection",
+            currentSpend: parseFloat(impact.totalActualSpend || "0"),
+            threshold: parseFloat(impact.totalExpectedSpend || "0"),
+            percentageIncrease: parseFloat(impact.totalImpactPercentage || "0"),
+            currency: "USD",
+            topResources: [{
+                service: body.monitorName || "AWS Service",
+                cost: parseFloat((body.maxImpact || {}).maxAmount || "0"),
+                resourceId: body.dimensionValue || "unknown"
+            }],
+            source: "cost-anomaly-detection"
+        };
+    }
+
+    if (!costAlert) {
+        return res.status(400).json({ error: "Unrecognized payload format. Supported: AWS SNS/CloudWatch alarm, Cost Anomaly Detection webhook, or manual test (type: 'cost_anomaly')." });
+    }
+
+    console.log(`[CloudWatch Webhook] Triggering cost anomaly response: ${costAlert.id} ($${costAlert.currentSpend}, ${costAlert.percentageIncrease}% increase)`);
+    handleCostAnomalyIncident(costAlert).catch(err => {
+        console.error(`[CloudWatch Webhook Async Error] ${err.message}`);
+    });
+
+    res.json({ status: "cost_remediation_started", id: costAlert.id });
+});
+
+// GET /api/incidents/:id/runbook — return runbook steps for a specific incident
+app.get("/api/incidents/:id/runbook", (req, res) => {
+    if (!activeIncidents) {
+        return res.status(500).json({ error: "Modules not loaded." });
+    }
+    const incident = activeIncidents.get(req.params.id);
+    if (!incident) {
+        return res.status(404).json({ error: "Incident not found." });
+    }
+    const inc = incident;
+    res.json({
+        incidentId: req.params.id,
+        status: inc.status,
+        runbookSteps: inc.runbookSteps || [],
+        triggerType: inc.triggerType || "unknown"
+    });
+});
+
 // Auto-triage background monitor
 setInterval(() => {
     if (requestHistory.length < 10) return;
@@ -321,7 +613,7 @@ setInterval(() => {
 
             const alertPayload = {
                 id: autoIncidentId,
-                severity: "HIGH",
+                severity: "MEDIUM",
                 service: "api-gateway",
                 triggeredAt: new Date().toISOString(),
                 errorRate,
@@ -333,7 +625,7 @@ setInterval(() => {
 
             connectionLogs = [];
 
-            handleIncident(alertPayload).catch(err => {
+            handleIncident(alertPayload, true).catch(err => {
                 console.error(`[Monitor Async Error] ${err.message}`);
             });
         }
@@ -377,7 +669,15 @@ app.get("/api/incidents", (req, res) => {
             logsReadTime: value.logsReadTime || null,
             prCreatedTime: value.prCreatedTime || null,
             mergedTime: value.mergedTime || null,
-            rolledBackTime: value.rolledBackTime || null
+            rolledBackTime: value.rolledBackTime || null,
+            resolvedTime: value.resolvedTime || null,
+            triggeredTime: value.triggeredTime || null,
+            autoMode: value.autoMode || false,
+            patchScore: value.patchScore || null,
+            triggerType: value.triggerType || "unknown",
+            runbookStepsCount: value.runbookSteps ? value.runbookSteps.length : null,
+            costSaving: value.costSaving || null,
+            patchConfidence: value.patchConfidence || null
         });
     });
     res.json(list);

@@ -34,8 +34,16 @@ export function getSeverityConfig(sev: Severity): DelegationConfig {
     }
 }
 
-export async function classifySeverity(logs: string[]): Promise<Severity> {
-    const apiKey = process.env.GROQ_API_KEY;
+export async function classifySeverity(logs: string[], secureContext?: { getSecret: (key: string) => string | null }): Promise<Severity> {
+    // Zero-Secrets: retrieve Groq key from TEE vault if secureContext provided
+    let apiKey: string | undefined;
+    if (secureContext) {
+        const secretKey = secureContext.getSecret("groq_api_key");
+        if (secretKey) apiKey = secretKey;
+    }
+    if (!apiKey) {
+        apiKey = process.env.GROQ_API_KEY;
+    }
 
     if (!apiKey || apiKey.startsWith("gsk_mock") || apiKey === "") {
         console.log("[Severity Classifier] Warning: No GROQ_API_KEY. Defaulting classification to MEDIUM (P2).");
