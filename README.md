@@ -152,10 +152,13 @@ npm run compile
 cargo build --target wasm32-wasip2 --release
 ```
 
-### 3. Launch Dashboard
+### 3. Launch Dashboard & Auto-Registration
 ```bash
 npm start
 ```
+> [!NOTE]
+> On startup, the control plane server checks if `T3N_CONTRACT_ID` is set in your `.env`. If it is missing, the server automatically attempts to spawn `node scratch/register-contract.js` to register your guest Rust WASM contract on the live testnet and updates your `.env` automatically. If the testnet account does not have sufficient faucet credits, it prints a clear log warning and gracefully enables the local enclave simulation fallback mode.
+
 Navigate to **[http://localhost:3000](http://localhost:3000)**.
 
 <p align="center">

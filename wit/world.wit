@@ -11,13 +11,14 @@ interface contracts {
     create-fix-pr: func(req: generic-input) -> result<list<u8>, string>;
     merge-fix: func(req: generic-input) -> result<list<u8>, string>;
     revert-commit: func(req: generic-input) -> result<list<u8>, string>;
-    get-secret: func(req: generic-input) -> result<list<u8>, string>;
 }
 
 world department-of-incidents {
     import host:tenant/tenant-context@1.0.0;
     import host:interfaces/logging@2.1.0;
     import host:interfaces/kv-store@2.1.0;
+    import host:interfaces/http@2.1.0;
+    import host:interfaces/http-with-placeholders@2.1.0;
 
     export contracts;
 }

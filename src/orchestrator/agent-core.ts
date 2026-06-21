@@ -3,8 +3,8 @@ import * as path from "path";
 import * as fs from "fs";
 import { Wallet } from "ethers";
 import { T3Agent, T3Session, ApprovalResult, SecureContext } from "../sdk-wrapper/t3-agent";
-import { classifySeverity, getSeverityConfig, Severity } from "./severity";
-import { analyzeLogs, RunbookStep, CostRemediation } from "./llm";
+import { classifySeverity, getSeverityConfig, Severity, SEVERITY_PROMPT } from "./severity";
+import { analyzeLogs, RunbookStep, CostRemediation, DIAGNOSIS_PROMPT } from "./llm";
 import { validatePatch } from "./validate";
 import { runCanaryWindow } from "./canary";
 import { requestApprovals } from "./approvals";
@@ -98,10 +98,26 @@ export async function handleIncident(alert: Alert, autoMode: boolean = false): P
 
         // Step 2: Read logs under on-call engineer identity (Zero-Secrets: LLM key from TEE vault)
         incident.status = "Analyzing Logs in TEE";
+        let sourceCode = "";
+        try {
+            const codePath = path.join(process.cwd(), "app_service.js");
+            if (fs.existsSync(codePath)) {
+                sourceCode = fs.readFileSync(codePath, "utf-8");
+            }
+        } catch (e) {
+            console.error("[Incident Manager] Warning: could not read app_service.js for TEE input:", e);
+        }
+
         const logs = await agent.authenticate({
             session,
             delegateDID: alert.onCallEngineerDID,
             scope: "repo:read",
+            functionName: "investigate-logs",
+            input: {
+                system_prompt: DIAGNOSIS_PROMPT,
+                user_prompt: `Incident logs:\n${alert.logs.join("\n")}\n\nTarget Code File (app_service.js):\n${sourceCode}`,
+                model: "llama-3.3-70b-versatile"
+            },
             action: async (secureContext?: { getSecret: (key: string) => string | null }) => {
                 console.log(`[Incident Agent] Securely loading logs and invoking LLM inside TEE boundary...`);
                 
@@ -142,7 +158,7 @@ export async function handleIncident(alert: Alert, autoMode: boolean = false): P
 
         await agent.audit.write({
             action: "PATCH_VALIDATED",
-            actor: "did:t3:agent:department-of-incidents",
+            actor: agent.agentDid,
             incidentId: alert.id,
             details: `Score: ${validation.score}/100. Safe: ${validation.safe}. ${validation.reason}. Checks: syntax=${validation.checks.hasSyntax}, pattern=${validation.checks.hasExpectedPattern}, range=${validation.checks.valueInSafeRange}, clean=${validation.checks.noMaliciousPatterns}`
         });
@@ -163,14 +179,22 @@ export async function handleIncident(alert: Alert, autoMode: boolean = false): P
 
         // Step 4: Classify severity via Groq (Zero-Secrets: key from TEE vault)
         incident.status = "Classifying Severity";
-        const severity = await agent.authenticate({
+        const severityResult = await agent.authenticate({
             session,
             delegateDID: alert.onCallEngineerDID,
             scope: "severity:classify",
+            functionName: "investigate-logs",
+            input: {
+                system_prompt: SEVERITY_PROMPT,
+                user_prompt: `Incident logs:\n${alert.logs.join("\n")}`,
+                model: "llama-3.3-70b-versatile"
+            },
             action: async (secureContext) => {
-                return classifySeverity(alert.logs, secureContext);
+                const sevStr = await classifySeverity(alert.logs, secureContext);
+                return { severity: sevStr };
             }
         });
+        const severity = (severityResult && (severityResult as any).severity ? (severityResult as any).severity : severityResult) as Severity;
         incident.severity = severity;
         const config = getSeverityConfig(severity);
 
@@ -205,7 +229,7 @@ export async function handleIncident(alert: Alert, autoMode: boolean = false): P
 
             await agent.audit.write({
                 action: "AUTO_PATCH_APPLIED",
-                actor: "did:t3:agent:department-of-incidents",
+                actor: agent.agentDid,
                 incidentId: alert.id,
                 details: `Patch directly applied to app_service.js. Pool size increased. No PR required.`
             });
@@ -225,7 +249,7 @@ export async function handleIncident(alert: Alert, autoMode: boolean = false): P
 
             await agent.audit.write({
                 action: "INCIDENT_RESOLVED",
-                actor: "did:t3:agent:department-of-incidents",
+                actor: agent.agentDid,
                 incidentId: alert.id,
                 details: `Auto-resolved in ${resolutionTimeSec}s. No human intervention required.`
             });
@@ -238,10 +262,28 @@ export async function handleIncident(alert: Alert, autoMode: boolean = false): P
 
         // Step 5: Draft Pull Request (Create Branch) under Code Owner identity
         incident.status = "Drafting Pull Request";
+        const repo = process.env.GITHUB_REPO || "Starlight-Local/department-of-incidents";
+        let latestMainSha = "9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1d0e";
+        try {
+            const { execSync } = require("child_process");
+            const workspaceDir = process.env.GIT_WORKSPACE_DIR || path.join(process.cwd(), "workspace");
+            latestMainSha = execSync("git rev-parse HEAD", { cwd: workspaceDir }).toString().trim();
+        } catch (e) {}
+
+        const branchName = "fix/db-pool-exhaustion-" + Math.random().toString(36).substring(2, 6);
+
         const prDetails = await agent.authenticate({
             session,
             delegateDID: alert.codeOwnerDID,
             scope: "repo:write",
+            functionName: "create-fix-pr",
+            input: {
+                repo,
+                branch: branchName,
+                patch: diagnosis.patch,
+                sha: latestMainSha,
+                path: "app_service.js"
+            },
             action: async () => {
                 return createPR(diagnosis.patch, {});
             }
@@ -260,7 +302,7 @@ export async function handleIncident(alert: Alert, autoMode: boolean = false): P
         if (config.approvalsRequired > 0) {
             const approvers = config.approvalsRequired === 1 
                 ? [alert.codeOwnerDID] 
-                : [alert.codeOwnerDID, process.env.APPROVER_DID || "did:t3:user:charlie"];
+                : [alert.codeOwnerDID, process.env.ACTIVE_BROWSER_DID || "did:t3:user:charlie"];
             
             await notifySlack(`⏳ *Awaiting Cryptographic Signatures:* ${config.approvalsRequired} signatures required from: ${JSON.stringify(approvers)}`);
             

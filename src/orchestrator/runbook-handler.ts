@@ -5,7 +5,7 @@
  */
 
 import { agent, activeIncidents, Alert } from "./agent-core";
-import { parseRunbook, RunbookStep } from "./llm";
+import { parseRunbook, RunbookStep, RUNBOOK_PROMPT } from "./llm";
 import { notifySlack } from "./notify";
 import { Severity } from "./severity";
 
@@ -51,8 +51,8 @@ export async function handleRunbookIncident(alert: RunbookAlert): Promise<void> 
             `Details: ${alert.details || "N/A"}`,
             `Service: ${alert.service}`
         ],
-        onCallEngineerDID: process.env.ONCALL_DID || "did:t3:user:oncall-engineer",
-        codeOwnerDID: process.env.ONCALL_DID || "did:t3:user:oncall-engineer"
+        onCallEngineerDID: process.env.ACTIVE_BROWSER_DID || "did:t3:user:oncall-engineer",
+        codeOwnerDID: process.env.ACTIVE_BROWSER_DID || "did:t3:user:oncall-engineer"
     };
 
     activeIncidents.set(alert.id, {
@@ -77,7 +77,7 @@ export async function handleRunbookIncident(alert: RunbookAlert): Promise<void> 
         const session = await agent.handshake();
         incident.session = session;
 
-        const oncallDID = process.env.ONCALL_DID || "did:t3:user:oncall-engineer";
+        const oncallDID = process.env.ACTIVE_BROWSER_DID || "did:t3:user:oncall-engineer";
 
         // Step 2: Fetch/parse runbook content
         incident.status = "Fetching Runbook";
@@ -113,6 +113,12 @@ export async function handleRunbookIncident(alert: RunbookAlert): Promise<void> 
             session,
             delegateDID: oncallDID,
             scope: "runbook:parse",
+            functionName: "investigate-logs",
+            input: {
+                system_prompt: RUNBOOK_PROMPT,
+                user_prompt: `Incident: ${alert.title}\nRunbook content:\n${runbookContent}`,
+                model: "llama-3.3-70b-versatile"
+            },
             action: async (secureContext) => {
                 const parsedSteps = await parseRunbook(alert.title, runbookContent, secureContext);
                 await agent.audit.write({

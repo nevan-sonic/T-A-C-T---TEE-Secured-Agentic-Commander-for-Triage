@@ -17,19 +17,20 @@ export async function executeMerge(
     
     // T3 injects the approver's GitHub token inside TEE
     // agent code only sees the structured result
+    const repo = process.env.GITHUB_REPO || "Starlight-Local/department-of-incidents";
+    const prNumber = parseInt(prUrl.split("/").pop() || "42", 10);
+
     const mergeResult = await agent.executeUnder({
         session,
         delegateDID: approvalResult.approverDID,
         credential: approvalResult.credential,
         functionName: "merge-fix",
+        input: {
+            repo,
+            pr_number: prNumber,
+            branch: branchName
+        },
         action: async (secureContext) => {
-            // Retrieve token inside enclave (just logging confirmation in simulator)
-            const token = secureContext.getSecret("github_token");
-            if (!token) {
-                console.log("[T3 Enclave] Warning: No github_token found in T3 Secrets Vault. Using default.");
-            } else {
-                console.log("[T3 Enclave] github_token successfully injected into execution context.");
-            }
             return mergePR(branchName, secureContext);
         },
     });

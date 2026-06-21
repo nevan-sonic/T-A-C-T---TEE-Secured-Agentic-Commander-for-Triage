@@ -6,6 +6,29 @@ const { ethers } = require("ethers");
 // Load environment variables
 dotenv.config();
 
+// Auto-register contract on startup if missing
+if (!process.env.T3N_CONTRACT_ID) {
+    console.log("\n============================================================");
+    console.log("[Starlight Startup] T3N_CONTRACT_ID not set in environment.");
+    console.log("[Starlight Startup] Attempting automatic one-time WASM contract registration...");
+    console.log("============================================================\n");
+    try {
+        const { execSync } = require("child_process");
+        execSync("node scratch/register-contract.js", { stdio: "inherit" });
+        // Reload environment variables to pick up T3N_CONTRACT_ID written by the script
+        dotenv.config({ override: true });
+        console.log(`[Starlight Startup] Reloaded config. T3N_CONTRACT_ID=${process.env.T3N_CONTRACT_ID}`);
+    } catch (regErr) {
+        console.error("\n============================================================");
+        console.error("⚠️  [T3N REGISTRATION WARNING] Auto-registration failed!");
+        console.error(`Reason: ${regErr.message}`);
+        console.error("Please ensure your account (c8eb415587d29e3155bb615149156b0ce5f2ecc5) has credit.");
+        console.error("Or run manually using: node scratch/register-contract.js");
+        console.error("Proceeding with Local Enclave Simulation fallback mode...");
+        console.error("============================================================\n");
+    }
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -124,12 +147,19 @@ try {
 }
 
 // Track the latest active DID from the browser dashboard
-let activeBrowserDID = process.env.ONCALL_ENGINEER_DID || "did:t3n:1dc692077cbf6d404b619c8d9b6648849c74802c";
+let activeBrowserDID = process.env.ACTIVE_BROWSER_DID || process.env.ONCALL_ENGINEER_DID || "";
+if (!activeBrowserDID) {
+    const randomKey = ethers.Wallet.createRandom().privateKey;
+    const key = process.env.T3N_API_KEY || process.env.T3_PRIVATE_KEY || randomKey;
+    const derived = new ethers.Wallet(key).address.toLowerCase();
+    activeBrowserDID = "did:t3n:" + derived.replace("0x", "");
+}
 
 app.post("/api/register-active-did", (req, res) => {
     const { did } = req.body;
     if (did && (did.startsWith("did:t3n:") || did.startsWith("did:t3:"))) {
         activeBrowserDID = did;
+        process.env.ACTIVE_BROWSER_DID = did;
         console.log(`[Control Plane] Registered active browser DID: ${activeBrowserDID}`);
         
         // Seed z-namespace secrets for this DID

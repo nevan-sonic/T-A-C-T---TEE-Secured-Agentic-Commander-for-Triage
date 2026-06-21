@@ -19,6 +19,8 @@ export interface AuthenticateConfig<T> {
     session: T3Session;
     delegateDID: string;
     scope: string;
+    functionName?: string;
+    input?: any;
     action: (secureContext?: { getSecret: (key: string) => string | null }) => Promise<T>;
 }
 
@@ -41,6 +43,7 @@ export interface ExecuteUnderConfig<T> {
     delegateDID: string;
     credential: string;
     functionName: string;
+    input?: any;
     action: (secureContext: SecureContext) => Promise<T>;
 }
 
@@ -117,9 +120,7 @@ export class T3Agent {
     }
 
     public async handshake(): Promise<T3Session> {
-        const sessionId = "sess_" + Math.random().toString(36).substring(2, 8);
         const now = Date.now();
-        console.log(`[T3 Agent SDK] Handshake established. Session ID: ${sessionId}`);
 
         try {
             if (!this.sdk) {
@@ -259,16 +260,47 @@ export class T3Agent {
                 // Already handshaked and authenticated, reuse the client
             }
         } catch (err: any) {
-            console.error(`[T3 Agent SDK] Real testnet integration handshake failed: ${err.stack || err.message || err}. Running in simulation mode.`);
+            if (isBillingOrNetworkException(err)) {
+                console.warn(`[T3 Agent SDK] Real testnet integration handshake failed with billing/network exception: ${err.message || err}. Running in simulation mode.`);
+            } else {
+                console.error(`[T3 Agent SDK] Real testnet integration handshake failed: ${err.stack || err.message || err}`);
+                throw err;
+            }
         }
 
+        let finalSessionId = "";
+        if (this.client) {
+            const sidObj = this.client.getSessionId();
+            if (sidObj && sidObj.value) {
+                finalSessionId = sidObj.value;
+            } else {
+                throw new Error("Failed to retrieve session ID from Terminal 3 SDK Client.");
+            }
+        } else {
+            finalSessionId = "sess_" + Math.random().toString(36).substring(2, 8);
+        }
+
+        console.log(`[T3 Agent SDK] Handshake established. Session ID: ${finalSessionId}`);
+
         return {
-            sessionId,
+            sessionId: finalSessionId,
             agentDID: this.config.agentDID,
             createdAt: now,
             authorizedDIDs: new Map(),
             expiresAt: now + SESSION_TTL_MS
         };
+    }
+
+    public isClientActive(): boolean {
+        return this.client !== null;
+    }
+
+    public get agentDid(): string {
+        return this.config.agentDID;
+    }
+
+    public isBillingFallbackActive(): boolean {
+        return this.lastExecutionFailedWithBilling;
     }
 
     private checkSessionExpiry(session: T3Session): void {
@@ -277,62 +309,9 @@ export class T3Agent {
         }
     }
 
-    private lastPrefetchFailedWithBilling = false;
+    private lastExecutionFailedWithBilling = false;
 
-    private async prefetchSecrets(): Promise<Map<string, string>> {
-        const secrets = new Map<string, string>();
-        if (!this.client || !this.scriptName) return secrets;
-
-        this.lastPrefetchFailedWithBilling = false;
-        const keys = ["github_token", "groq_api_key", "aws_access_key_id", "aws_secret_access_key"];
-
-        for (const key of keys) {
-            try {
-                // Fetch from real testnet secrets by executing the guest contract's "get-secret" function!
-                const res = await this.client.executeAndDecode({
-                    script_name: this.scriptName,
-                    script_version: this.scriptVersion,
-                    function_name: "get-secret",
-                    input: {
-                        input: Buffer.from(key)
-                    }
-                }) as any;
-                if (res && res.value) {
-                    const secretVal = Buffer.from(res.value).toString("utf-8");
-                    secrets.set(key, secretVal);
-                    console.log(`[T3 Agent SDK] Successfully retrieved secret '${key}' from real guest contract execution.`);
-                }
-            } catch (err: any) {
-                if (isBillingOrNetworkException(err)) {
-                    this.lastPrefetchFailedWithBilling = true;
-                }
-                // This is normal if credit is insufficient or map lacks the key
-                console.log(`[T3 Agent SDK] Note: Real guest contract 'get-secret' for '${key}' failed: ${err.message}`);
-                
-                // Control plane map-entry-get fallback (still real testnet)
-                if (this.tenant) {
-                    try {
-                        const canonicalName = this.tenant.canonicalName("secrets");
-                        const res = await this.tenant.executeControl("map-entry-get", {
-                            map_name: canonicalName,
-                            key: key
-                        }) as any;
-                        if (res && res.value) {
-                            secrets.set(key, res.value);
-                            console.log(`[T3 Agent SDK] Successfully pre-fetched secret '${key}' from real testnet KV map (control plane fallback).`);
-                        }
-                    } catch (cpErr: any) {
-                        if (isBillingOrNetworkException(cpErr)) {
-                            this.lastPrefetchFailedWithBilling = true;
-                        }
-                    }
-                }
-            }
-        }
-        return secrets;
-    }
-
-    private buildSecureContext(delegateDID: string, prefetchedSecrets?: Map<string, string>): SecureContext {
+    private buildSecureContext(delegateDID: string): SecureContext {
         return {
             tenantDid: this.config.agentDID,
             delegateDid: delegateDID,
@@ -342,24 +321,17 @@ export class T3Agent {
                     return null;
                 }
 
-                // 1. Try reading from pre-fetched real testnet secrets first
-                if (prefetchedSecrets && prefetchedSecrets.has(key)) {
-                    console.log(`[T3 Enclave] Secret '${key}' retrieved from real testnet KV map.`);
-                    return prefetchedSecrets.get(key)!;
-                }
-
-                // If running on real testnet, check if we should allow fallbacks
+                // If running on real testnet, direct secret access on the host is strictly forbidden.
                 if (this.client) {
-                    if (this.lastPrefetchFailedWithBilling) {
-                        console.log(`[T3 Enclave] ⚠ GRACEFUL FALLBACK: Secret '${key}' not found in real testnet enclave due to billing limit.`);
+                    if (this.lastExecutionFailedWithBilling) {
+                        console.log(`[T3 Enclave] ⚠ GRACEFUL FALLBACK: Reading local fallback for secret '${key}' due to billing limit.`);
                     } else {
-                        // Billing is fine, but secret is genuinely missing or unauthorized! Do NOT fall back!
-                        console.log(`[T3 Enclave] ❌ SECURITY ERROR: Secret '${key}' missing/unauthorized on testnet. Silently refusing local fallback.`);
-                        return null;
+                        console.log(`[T3 Enclave] ❌ SECURITY ERROR: Direct secret access for '${key}' is forbidden when real client is active.`);
+                        throw new Error(`[Security] Direct secret access for '${key}' is forbidden when real client is active.`);
                     }
                 }
 
-                // 2. First try reading securely from local simulator vault
+                // 1. First try reading securely from local simulator vault
                 const matches = delegateDID.match(/did:t3n:([0-9a-fA-F]+)/) || delegateDID.match(/did:t3:user:([0-9a-fA-F]+)/);
                 const tid = matches ? matches[1].toLowerCase() : "bccc24bd2926d5c0065cb99f4d032fdc4f2289ec";
                 try {
@@ -377,7 +349,7 @@ export class T3Agent {
                     return simVal;
                 }
 
-                // 3. Fall back to process.env if not found in simulator maps
+                // 2. Fall back to process.env if not found in simulator maps (only when client is not active)
                 if (key === "github_token" && process.env.GITHUB_TOKEN) {
                     console.log(`[T3 Enclave] Warning: Falling back to process.env for secret '${key}'.`);
                     return process.env.GITHUB_TOKEN;
@@ -409,18 +381,29 @@ export class T3Agent {
         console.log(`[T3 Agent SDK] Authenticating user DID: ${config.delegateDID} with scope '${config.scope}'...`);
 
         // Execute real testnet contract call if client is available
+        let testnetResult: any = null;
+        let testnetFailedWithBilling = false;
+
         if (this.client) {
+            const funcName = config.functionName || "investigate-logs";
             try {
-                console.log(`[T3 Agent SDK] Invoking guest contract function 'investigate-logs' on real testnet...`);
+                console.log(`[T3 Agent SDK] Invoking guest contract function '${funcName}' on real testnet...`);
                 const executionResult = await this.client.executeAndDecode({
                     script_name: this.scriptName,
                     script_version: this.scriptVersion,
-                    function_name: "investigate-logs",
-                    input: {}
+                    function_name: funcName,
+                    input: {
+                        input: Buffer.from(JSON.stringify(config.input || {}))
+                    }
                 });
                 console.log(`[T3 Agent SDK] Testnet execution SUCCESS:`, executionResult);
+                if (executionResult && executionResult.value) {
+                    testnetResult = JSON.parse(Buffer.from(executionResult.value).toString("utf-8"));
+                }
             } catch (err: any) {
                 if (isBillingOrNetworkException(err)) {
+                    testnetFailedWithBilling = true;
+                    this.lastExecutionFailedWithBilling = true;
                     console.log(`[T3 Agent SDK] ⚠ GRACEFUL FALLBACK: Real testnet execution failed with billing/network exception (${err.message}).`);
                     console.log(`[T3 Agent SDK] Running in attested local host mode with zero-knowledge hardware simulation verification.`);
                 } else {
@@ -430,9 +413,13 @@ export class T3Agent {
             }
         }
 
+        if (this.client && !testnetFailedWithBilling && testnetResult) {
+            console.log(`[T3 Agent SDK] Returning load-bearing execution result from real testnet contract.`);
+            return testnetResult as T;
+        }
+
         try {
-            const prefetchedSecrets = await this.prefetchSecrets();
-            const secureContext = this.buildSecureContext(config.delegateDID, prefetchedSecrets);
+            const secureContext = this.buildSecureContext(config.delegateDID);
             const result = await config.action(secureContext);
             return result;
         } catch (e: any) {
@@ -531,7 +518,12 @@ export class T3Agent {
                         });
                         console.log("[T3 Agent SDK] Real agent-auth-update grant registered on testnet:", grantRes);
                     } catch (gErr: any) {
-                        console.warn(`[T3 Agent SDK] Real testnet agent-auth-update failed: ${gErr.message || gErr}. Continuing in simulation.`);
+                        if (isBillingOrNetworkException(gErr)) {
+                            console.warn(`[T3 Agent SDK] Real testnet agent-auth-update failed with billing/network exception: ${gErr.message || gErr}. Continuing in simulation.`);
+                        } else {
+                            console.error(`[T3 Agent SDK] Real testnet agent-auth-update failed: ${gErr.message || gErr}`);
+                            throw gErr;
+                        }
                     }
                 }
 
@@ -552,6 +544,9 @@ export class T3Agent {
         console.log(`[T3 Agent SDK] executeUnder() requested. Caller DID: ${config.delegateDID}`);
 
         const cachedCred = config.session.authorizedDIDs.get(config.delegateDID);
+        if (!cachedCred) {
+            throw new Error(`T3 Security Breach: executeUnder denied. No active delegation grant found in session for DID ${config.delegateDID}`);
+        }
         let isAuthorized = cachedCred === config.credential;
         if (!isAuthorized) {
             isAuthorized = enclaveSimulator.verifyCredential(config.delegateDID, config.credential);
@@ -577,7 +572,9 @@ export class T3Agent {
                     script_name: this.scriptName,
                     script_version: this.scriptVersion,
                     function_name: funcName,
-                    input: {},
+                    input: {
+                        input: Buffer.from(JSON.stringify(config.input || {}))
+                    },
                     pii_did: config.delegateDID // Real delegation gating
                 });
                 console.log(`[T3 Agent SDK] Testnet execution '${funcName}' SUCCESS:`, executionResult);
@@ -587,6 +584,7 @@ export class T3Agent {
             } catch (err: any) {
                 if (isBillingOrNetworkException(err)) {
                     testnetFailedWithBilling = true;
+                    this.lastExecutionFailedWithBilling = true;
                     console.log(`[T3 Agent SDK] ⚠ GRACEFUL FALLBACK: Real testnet execution '${funcName}' failed with billing/network exception (${err.message}).`);
                     console.log(`[T3 Agent SDK] Running in attested local host mode with zero-knowledge hardware simulation verification.`);
                 } else {
@@ -596,20 +594,19 @@ export class T3Agent {
             }
         }
 
+        if (this.client && !testnetFailedWithBilling && testnetResult) {
+            console.log(`[T3 Agent SDK] Returning load-bearing execution result from real testnet contract.`);
+            return testnetResult as T;
+        }
+
         console.log(`[T3 Enclave] Entering hardware enclave for DID: ${config.delegateDID}...`);
 
-        const prefetchedSecrets = await this.prefetchSecrets();
-        const secureContext = this.buildSecureContext(config.delegateDID, prefetchedSecrets);
+        const secureContext = this.buildSecureContext(config.delegateDID);
         secureContext.credential = config.credential;
 
         try {
             const localResult = await config.action(secureContext);
             console.log(`[T3 Enclave] Execution complete. Exiting enclave.`);
-
-            if (this.client && !testnetFailedWithBilling && testnetResult) {
-                console.log(`[T3 Agent SDK] Returning load-bearing execution result from real testnet contract.`);
-                return testnetResult as T;
-            }
 
             if (this.client && testnetFailedWithBilling) {
                 console.log(`[T3 Agent SDK] Returning local execution result from GRACEFUL FALLBACK path (billing limit).`);

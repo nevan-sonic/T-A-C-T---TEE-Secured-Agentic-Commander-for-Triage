@@ -20,11 +20,35 @@ export async function executeRollback(
     
     console.log("[Incident Guard] Re-authentication verified. Reverting changes inside enclave...");
     
+    const repo = process.env.GITHUB_REPO || "Starlight-Local/department-of-incidents";
+    const defaultAppService = `// Production Gateway Database Connection Pool Init
+const { Pool } = require("pg");
+
+const poolConfig = {
+  host: "localhost",
+  port: 5432,
+  database: "production_db",
+  // Database connection limit
+  max: 20,
+  idleTimeoutMillis: 10000,
+  connectionTimeoutMillis: 2000,
+};
+
+const dbPool = new Pool(poolConfig);
+
+module.exports = { dbPool, poolConfig };
+`;
+
     await agent.executeUnder({
         session: rollbackSession,
         delegateDID: reauth.approverDID,
         credential: reauth.credential,
         functionName: "revert-commit",
+        input: {
+            repo,
+            revert_file_content: defaultAppService,
+            path: "app_service.js"
+        },
         action: async (ctx) => revertCommit(mergeCommitSha, ctx),
     });
     

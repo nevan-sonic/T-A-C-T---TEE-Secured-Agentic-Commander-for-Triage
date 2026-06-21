@@ -6,7 +6,7 @@
  */
 
 import { agent, activeIncidents, Alert } from "./agent-core";
-import { analyzeCostAnomaly, CostRemediation } from "./llm";
+import { analyzeCostAnomaly, CostRemediation, COST_PROMPT } from "./llm";
 import { notifySlack } from "./notify";
 import { Severity } from "./severity";
 
@@ -39,7 +39,7 @@ export async function handleCostAnomalyIncident(alert: CostAnomalyAlert): Promis
 
     // Create incident entry
     const triggeredTime = Date.now();
-    const finOpsDID = process.env.FINOPS_DID || "did:t3:user:finops";
+    const finOpsDID = process.env.ACTIVE_BROWSER_DID || "did:t3:user:finops";
 
     const incidentAlert: Alert = {
         id: alert.id,
@@ -94,6 +94,12 @@ export async function handleCostAnomalyIncident(alert: CostAnomalyAlert): Promis
             session,
             delegateDID: finOpsDID,
             scope: "aws:read",
+            functionName: "investigate-logs",
+            input: {
+                system_prompt: COST_PROMPT,
+                user_prompt: `Cost anomaly detected: ${alert.percentageIncrease}% increase over baseline.\nTop resources by spend:\n${alert.topResources.map(r => `- ${r.service}: $${r.cost} (${r.resourceId})`).join("\n")}`,
+                model: "llama-3.3-70b-versatile"
+            },
             action: async (secureContext) => {
                 console.log(`[Cost Handler] Analyzing cost anomaly under ${finOpsDID} credentials...`);
 
@@ -129,7 +135,7 @@ export async function handleCostAnomalyIncident(alert: CostAnomalyAlert): Promis
 
         // Step 5: Execute remediations with tiered approvals
         incident.status = "Executing Remediations";
-        const financeLeadDID = process.env.FINANCE_LEAD_DID || "did:t3:user:finance-lead";
+        const financeLeadDID = process.env.ACTIVE_BROWSER_DID || "did:t3:user:finance-lead";
         let totalSaving = 0;
         const executedActions: string[] = [];
 
@@ -197,6 +203,10 @@ export async function handleCostAnomalyIncident(alert: CostAnomalyAlert): Promis
                 delegateDID: primaryApproval.approverDID,
                 credential: primaryApproval.credential,
                 functionName: "investigate-logs",
+                input: {
+                    system_prompt: "aws:remediate",
+                    user_prompt: remediation.awsCommand
+                },
                 action: async (secureContext) => {
                     // Retrieve AWS credentials from TEE vault (Zero-Secrets pattern)
                     const awsAccessKey = secureContext.getSecret("aws_access_key_id");

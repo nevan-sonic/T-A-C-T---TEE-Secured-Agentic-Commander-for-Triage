@@ -44,7 +44,7 @@ export interface CostRemediation {
 // Prompt Templates
 // ============================================================
 
-const DIAGNOSIS_PROMPT = `
+export const DIAGNOSIS_PROMPT = `
 You are an expert systems engineer. You are analyzing production logs from an incident and the source code of the affected service.
 Analyze the logs and code to:
 1. Identify the root cause of the failure.
@@ -60,7 +60,7 @@ Your response MUST be a JSON object containing precisely these three keys:
 Do NOT include any markdown markup outside the JSON. Return only the JSON object.
 `;
 
-const CVE_PROMPT = `
+export const CVE_PROMPT = `
 You are a security engineer. Analyze this CVE and generate a minimal safe fix.
 
 Respond with JSON only:
@@ -73,7 +73,7 @@ Respond with JSON only:
 Do NOT include markdown markup outside the JSON.
 `;
 
-const RUNBOOK_PROMPT = `
+export const RUNBOOK_PROMPT = `
 You are an SRE runbook parser. Parse the given runbook text into structured steps.
 Classify each step as one of: "diagnostic", "modification", "restart", or "verification".
 Mark requiresApproval=true for "modification" and "restart" types only.
@@ -93,7 +93,7 @@ Your response MUST be a JSON object containing:
 Do NOT include markdown markup outside the JSON.
 `;
 
-const COST_PROMPT = `
+export const COST_PROMPT = `
 You are a FinOps cloud cost analyst. Analyze the given AWS cost anomaly and recommend remediation actions.
 
 Your response MUST be a JSON object containing:
@@ -117,6 +117,19 @@ Do NOT include markdown markup outside the JSON.
 // ============================================================
 
 function resolveApiKey(secureContext?: { getSecret: (key: string) => string | null }): string | undefined {
+    const { agent } = require("./agent-core");
+    if (agent && agent.isClientActive()) {
+        if (!agent.isBillingFallbackActive()) {
+            if (!secureContext) {
+                console.log(`[T3 Enclave] ❌ SECURITY ERROR: Direct secret access for 'groq_api_key' is forbidden on real testnet.`);
+                throw new Error("[Security] Direct secret access is forbidden on real testnet.");
+            }
+            const secretKey = secureContext.getSecret("groq_api_key");
+            if (secretKey) return secretKey;
+            throw new Error("[Security] Groq API key is missing or direct secret access was refused.");
+        }
+    }
+
     if (secureContext) {
         const secretKey = secureContext.getSecret("groq_api_key");
         if (secretKey) return secretKey;

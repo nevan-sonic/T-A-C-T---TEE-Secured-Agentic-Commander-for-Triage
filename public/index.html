@@ -326,8 +326,8 @@
 
         // Mocks for DIDs matches the dynamic fallback key
         let AliceDID = "did:t3n:" + fallbackAddress.replace("0x", "");
-        const BobDID = "did:t3:user:bob";
-        const CharlieDID = "did:t3:user:charlie";
+        const BobDID = AliceDID;
+        const CharlieDID = AliceDID;
 
         // Dynamically resolve AliceDID based on MetaMask or local key
         async function registerDID(did) {

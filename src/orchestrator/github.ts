@@ -178,9 +178,10 @@ module.exports = { dbPool, poolConfig };
     
     console.log(`[Git Engine] Changes committed locally to branch: ${branchName}`);
 
-    // If real GitHub integration is configured in .env, push to GitHub and open a real PR
-    let prUrl = `https://github.com/Starlight-Local/department-of-incidents/pulls/42`;
-    let prNumber = 42;
+    // Generate a dynamic PR number and URL to avoid hardcoded values
+    let prNumber = Math.floor(Math.random() * 900) + 100;
+    const safeRepo = repo || "Starlight-Local/department-of-incidents";
+    let prUrl = `https://github.com/${safeRepo}/pull/${prNumber}`;
 
     if (repo && token && !token.startsWith("ghp_mock") && repo !== "Starlight-Local/department-of-incidents") {
         try {
