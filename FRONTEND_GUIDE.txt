@@ -1,0 +1,458 @@
+============================================================
+  T.A.C.T. — FRONTEND REDESIGN GUIDE
+  For: Frontend Developer
+  Backend: DO NOT TOUCH  |  Port: 3000
+============================================================
+
+This file documents every API endpoint, the data shapes they
+return, and everything you need to replace public/index.html
+with a redesigned frontend while keeping the backend working.
+
+------------------------------------------------------------
+FOLDER STRUCTURE (what you care about)
+------------------------------------------------------------
+
+  public/
+    index.html        ← THE ONLY FILE YOU NEED TO EDIT
+                        (all frontend lives here — one file)
+
+  server.js           ← backend, do not touch
+  src/                ← backend TypeScript, do not touch
+  dist/               ← compiled backend, do not touch
+
+You replace the contents of public/index.html with your own
+design. The server serves everything in public/ as static files,
+so you can also add separate .css, .js, or image files inside
+public/ if you want to split things up.
+
+------------------------------------------------------------
+RUNNING THE SERVER (backend stays running, you just edit HTML)
+------------------------------------------------------------
+
+  1. Follow REQUIREMENTS.txt to set up the project
+  2. Start the server:   node server.js
+  3. Open browser:       http://localhost:3000
+  4. Edit public/index.html and hard-refresh (Ctrl+Shift+R)
+
+------------------------------------------------------------
+CRITICAL: SIGNING SETUP (do this on page load)
+------------------------------------------------------------
+
+The approval flow requires the browser to have a wallet key
+that matches the server's configured approver DID.
+
+On page load, do this SYNCHRONOUSLY (use XMLHttpRequest, NOT
+fetch, so the key is ready before you do anything else):
+
+  // 1. Sync the signing key from the server
+  const xhr = new XMLHttpRequest();
+  xhr.open("GET", "/api/dev-wallet", false); // false = synchronous
+  xhr.send();
+  const devData = JSON.parse(xhr.responseText);
+
+  let signingKey = localStorage.getItem("t3_developer_private_key");
+  if (devData.privateKey && devData.privateKey.length === 66) {
+      signingKey = devData.privateKey;
+      localStorage.setItem("t3_developer_private_key", signingKey);
+  }
+  if (!signingKey || signingKey.length !== 66) {
+      signingKey = ethers.Wallet.createRandom().privateKey;
+      localStorage.setItem("t3_developer_private_key", signingKey);
+  }
+  const signingWallet = new ethers.Wallet(signingKey);
+
+  // 2. Register the DID with the server (seeds enclave secrets)
+  fetch("/api/register-active-did", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ did: "did:t3n:" + signingWallet.address.toLowerCase().replace("0x","") })
+  });
+
+You need ethers.js v6 for signing. Load it from CDN:
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+
+------------------------------------------------------------
+ALL API ENDPOINTS
+------------------------------------------------------------
+
+BASE URL: http://localhost:3000/api
+
+════════════════════════════════════════════════════════════
+ 1.  GET  /api/dev-wallet
+════════════════════════════════════════════════════════════
+Returns the server's configured signing key so the browser
+can sync its wallet. Call this SYNCHRONOUSLY on page load
+(see SIGNING SETUP above).
+
+Response:
+  {
+    "privateKey": "0x616355...",   // 66-char hex string or null
+    "did": "did:t3n:1dc692..."     // matching DID
+  }
+
+════════════════════════════════════════════════════════════
+ 2.  POST /api/register-active-did
+════════════════════════════════════════════════════════════
+Registers the browser's DID with the server so the enclave
+can seed secrets for it.
+
+Request body:
+  { "did": "did:t3n:<wallet_address_without_0x>" }
+
+Response:
+  { "status": "registered", "did": "did:t3n:1dc692..." }
+
+════════════════════════════════════════════════════════════
+ 3.  GET  /api/incidents
+════════════════════════════════════════════════════════════
+Returns all active and resolved incidents. Poll every 2–3s
+to keep the UI live.
+
+Response: Array of incident objects:
+  [
+    {
+      "id":               "INC-2026-0847",
+      "service":          "api-gateway",
+      "status":           "CVE Resolved" | "Runbook Completed" |
+                          "Cost Anomaly Resolved" | "Resolved" |
+                          "Analyzing" | "Creating PR" |
+                          "Awaiting Approval" | "Merging" |
+                          "Rolled Back" | "Rolling Back" | ...
+      "severity":         "HIGH" | "MEDIUM" | "LOW",
+      "errorRate":        78,           // percentage (number)
+      "p99Latency":       12000,        // milliseconds (number)
+      "rootCause":        "Connection pool exhausted...",
+      "patch":            "const pool = { max: 50 ... }",
+      "prUrl":            "https://github.com/.../pull/42",
+      "prNumber":         42,
+      "branch":           "fix/db-pool-exhaustion-xxxx",
+      "mergeCommit":      "f572c3bc...",
+      "revertCommit":     null,
+      "triggeredTime":    1718960000000,  // epoch ms (number)
+      "logsReadTime":     1718960002000,
+      "prCreatedTime":    1718960010000,
+      "mergedTime":       1718960050000,
+      "resolvedTime":     1718960100000,
+      "rolledBackTime":   null,
+      "autoMode":         false,
+      "patchScore":       75,           // 0-100 confidence score
+      "patchConfidence":  "HIGH",
+      "triggerType":      "github-cve" | "pagerduty" |
+                          "cloudwatch" | "datadog" |
+                          "prometheus" | "auto" | "manual",
+      "runbookStepsCount": 5,           // null if not a runbook
+      "costSaving":       "300150"      // string, null if not cost
+    },
+    ...
+  ]
+
+════════════════════════════════════════════════════════════
+ 4.  GET  /api/incidents/:id/runbook
+════════════════════════════════════════════════════════════
+Returns the runbook steps for a specific incident.
+
+Example: GET /api/incidents/RB-TEST-001/runbook
+
+Response:
+  {
+    "incidentId": "RB-TEST-001",
+    "status":     "Runbook Completed",
+    "triggerType": "pagerduty",
+    "runbookSteps": [
+      {
+        "step":        1,
+        "type":        "diagnostic" | "remediation" | "verification",
+        "description": "Check memory usage: free -h",
+        "status":      "completed" | "pending_approval" | "skipped",
+        "requiresApproval": false,
+        "executedAt":  1718960010000
+      },
+      ...
+    ]
+  }
+
+════════════════════════════════════════════════════════════
+ 5.  GET  /api/approvals
+════════════════════════════════════════════════════════════
+Returns pending approvals waiting for a signature. Poll every
+1–2s while any incident is in "Awaiting Approval" status.
+
+Response: Array of approval objects:
+  [
+    {
+      "id":          "app_dc77h8",
+      "approverDID": "did:t3n:1dc692077cbf6d404b619c8d9b6648849c74802c",
+      "scope":       "repo:merge" | "repo:revert" |
+                     "aws:rightsize" | "runbook:execute:step-3" | ...
+      "status":      "pending",
+      "metadata": {
+        "incidentId": "INC-2026-0847"
+      }
+    }
+  ]
+
+════════════════════════════════════════════════════════════
+ 6.  POST /api/approve
+════════════════════════════════════════════════════════════
+Submits a cryptographic signature to approve a pending action.
+
+⚠ IMPORTANT: The signature must be from the wallet that
+  matches app.approverDID exactly. Use the signing setup
+  in the SIGNING SETUP section above.
+
+How to sign and submit:
+
+  async function signAndApprove(approvalId, approverDID) {
+      // Build the message (MUST match this exact format)
+      const message = [
+          "T3 Agent Authorization Grant",
+          "Agent DID: did:t3:agent:department-of-incidents",
+          "Contract: z:system:incident-contracts",
+          `Function: incident-${approvalId}`,
+          `Approval ID: ${approvalId}`
+      ].join("\n");
+
+      // Sign with the synced wallet
+      const signature = await signingWallet.signMessage(message);
+
+      // Submit
+      const res = await fetch("/api/approve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: approvalId, signature })
+      });
+      return res.json();
+      // Success: { "status": "approved" }
+      // Failure: { "error": "Invalid signature proof. Address recovery failed." }
+  }
+
+════════════════════════════════════════════════════════════
+ 7.  GET  /api/ledger
+════════════════════════════════════════════════════════════
+Returns the immutable TEE audit ledger entries.
+
+Response: Array of ledger entries:
+  [
+    {
+      "action":    "CVE_DETECTED" | "LLM_INVOKED_IN_TEE" |
+                   "PATCH_VALIDATED" | "APPROVAL_GRANTED" |
+                   "MERGE_EXECUTED" | "CVE_PATCHED" |
+                   "RUNBOOK_STEP_EXECUTED" | "CANARY_PASS" |
+                   "COST_ANOMALY_DETECTED" | "COST_ANALYSIS_COMPLETE" |
+                   "LOG_READ" | "RUNBOOK_COMPLETED" | ...
+      "actor":     "did:t3n:1dc692..." | "did:t3:agent:department-of-incidents",
+      "timestamp": 1718960000000,   // epoch ms
+      "prUrl":     "https://...",   // optional
+      ...                           // extra fields vary by action
+    }
+  ]
+
+════════════════════════════════════════════════════════════
+ 8.  GET  /api/telemetry-metrics
+════════════════════════════════════════════════════════════
+Returns real-time service health from the simulated SRE service.
+Poll every 500ms for a live chart.
+
+Response:
+  {
+    "latency":   86,    // avg p99 latency in milliseconds
+    "errorRate": 12     // error rate as integer percentage (0-100)
+  }
+
+When errorRate >= 45% for 4+ seconds, the backend auto-creates
+an incident. This is what drives the live telemetry chart.
+
+════════════════════════════════════════════════════════════
+ 9.  POST /api/stress
+════════════════════════════════════════════════════════════
+Simulates a connection pool flood. Use this as a "demo trigger"
+button in your UI.
+
+Request body:
+  {
+    "connections": 25,     // how many connections to simulate (max 50)
+    "holdMs":      3000    // how long to hold them (milliseconds)
+  }
+
+Response:
+  {
+    "message":           "Simulating 25 concurrent connections for 3000ms",
+    "activeConnections": 25
+  }
+
+════════════════════════════════════════════════════════════
+ 10. GET  /api/service
+════════════════════════════════════════════════════════════
+The simulated target microservice endpoint. Useful for showing
+a live "service health" indicator — hits the actual pool sim.
+
+Response (healthy):
+  { "status": "success", "queryTimeMs": 145, "activeConnections": 3 }
+
+Response (degraded):
+  { "status": "error", "message": "Database connection pool exhausted", "max": 20, "active": 20 }
+
+════════════════════════════════════════════════════════════
+ 11. POST /api/webhook  (manual SRE incident trigger)
+════════════════════════════════════════════════════════════
+Triggers an SRE-style incident (connection pool / error rate).
+Use as a demo button.
+
+Request body:
+  {
+    "id":        "INC-2026-DEMO",
+    "severity":  "MEDIUM",
+    "service":   "api-gateway",
+    "triggeredAt": "2026-06-21T09:00:00.000Z",
+    "errorRate": 78,
+    "p99Latency": 12000,
+    "logs": [
+      "ERROR [pool] Connection pool exhausted",
+      "WARN  [db] Timeout acquiring connection after 5000ms"
+    ]
+  }
+
+Response:
+  { "status": "incident_triage_started", "id": "INC-2026-DEMO" }
+
+════════════════════════════════════════════════════════════
+ 12. POST /api/github-webhook  (CVE remediation trigger)
+════════════════════════════════════════════════════════════
+Triggers the CVE auto-patch pipeline. Minimal demo body:
+
+  {
+    "type":           "cve_manual",
+    "cveId":          "CVE-2024-29041",
+    "severity":       "medium",
+    "package":        "express",
+    "currentVersion": "4.18.2",
+    "fixedVersion":   "4.19.2",
+    "affectedFile":   "app_service.js",
+    "description":    "Open redirect vulnerability in express"
+  }
+
+Response:
+  { "status": "cve_remediation_started", "id": "CVE-CVE-2024-29041", "cveId": "CVE-2024-29041" }
+
+════════════════════════════════════════════════════════════
+ 13. POST /api/pagerduty-webhook  (runbook trigger)
+════════════════════════════════════════════════════════════
+Triggers runbook execution. Minimal demo body:
+
+  {
+    "type":        "runbook_manual",
+    "incidentId":  "RB-TEST-001",
+    "title":       "High database memory on db-replica-02",
+    "severity":    "high",
+    "service":     "database",
+    "runbookSteps": [
+      { "step": 1, "type": "diagnostic",   "description": "Check memory: free -h",         "requiresApproval": false },
+      { "step": 2, "type": "remediation",  "description": "Flush caches: sync; echo 3 > /proc/sys/vm/drop_caches", "requiresApproval": false },
+      { "step": 3, "type": "remediation",  "description": "Restart replica: systemctl restart postgres", "requiresApproval": true },
+      { "step": 4, "type": "verification", "description": "Verify replication lag",         "requiresApproval": false },
+      { "step": 5, "type": "diagnostic",   "description": "Check connection pool status",   "requiresApproval": false }
+    ]
+  }
+
+Response:
+  { "status": "runbook_execution_started", "id": "RB-TEST-001" }
+
+════════════════════════════════════════════════════════════
+ 14. POST /api/cloudwatch-webhook  (cost anomaly trigger)
+════════════════════════════════════════════════════════════
+Triggers cost anomaly remediation. Minimal demo body:
+
+  {
+    "type":               "cost_anomaly",
+    "alarmName":          "DailyCostAnomaly",
+    "currentSpend":       2847,
+    "threshold":          1200,
+    "percentageIncrease": 137,
+    "currency":           "USD",
+    "topResourceBySpend": [
+      { "service": "Amazon EC2",  "cost": 921,  "resourceId": "i-0abc123def456789" },
+      { "service": "Amazon RDS",  "cost": 255,  "resourceId": "db-instance-prod-01" },
+      { "service": "Amazon S3",   "cost": 50,   "resourceId": "bucket-ml-training-data" }
+    ]
+  }
+
+Response:
+  { "status": "cost_remediation_started", "id": "COST-XXXX" }
+
+════════════════════════════════════════════════════════════
+ 15. POST /api/incidents/:id/rollback  (revert a merge)
+════════════════════════════════════════════════════════════
+Triggers a rollback for an incident that has been merged.
+Only works if the incident has a mergeCommit.
+
+Example: POST /api/incidents/INC-2026-0847/rollback
+
+Response:
+  { "status": "rollback_initiated", "id": "INC-2026-0847" }
+
+------------------------------------------------------------
+POLLING STRATEGY (recommended intervals)
+------------------------------------------------------------
+
+  /api/telemetry-metrics    every 500ms   (live chart)
+  /api/incidents            every 2000ms  (incident list)
+  /api/approvals            every 1500ms  (approval panel)
+  /api/ledger               every 3000ms  (audit log)
+
+------------------------------------------------------------
+INCIDENT STATUS FLOW (for status badges)
+------------------------------------------------------------
+
+  SRE Incident:
+  Analyzing → Reading Logs → Classifying Severity →
+  Creating PR → Awaiting Approval → Merging → Resolved
+                                  ↓ (if rejected)
+                                  Rolled Back
+
+  CVE:
+  Reading Vulnerable File → Analyzing CVE → Generating Fix →
+  Validating Patch → Creating PR → Awaiting Approval →
+  Merging → Canary Window → CVE Resolved
+
+  Runbook:
+  Fetching Runbook → Executing Steps → (steps may need approval) →
+  Runbook Completed
+
+  Cost Anomaly:
+  Analyzing Cost Data in TEE → Cost Analysis Complete →
+  Executing Remediations → Cost Anomaly Resolved
+
+------------------------------------------------------------
+TRIGGER TYPES (for icons / labels)
+------------------------------------------------------------
+
+  "github-cve"   → shield / security icon
+  "pagerduty"    → bell / alert icon
+  "cloudwatch"   → cloud / dollar icon
+  "datadog"      → dog icon / monitor
+  "prometheus"   → chart / fire icon
+  "auto"         → robot / auto icon (self-detected by monitor)
+  "manual"       → hand / user icon
+
+------------------------------------------------------------
+NOTES
+------------------------------------------------------------
+
+- All timestamps in the API are epoch milliseconds (number).
+  Convert with: new Date(timestamp).toLocaleTimeString()
+
+- All costs in costSaving are strings (e.g. "300150" = $300,150).
+  Format as: "$" + parseInt(costSaving).toLocaleString()
+
+- The backend has no WebSocket — use polling.
+
+- The ethers.js version in use is v6 (not v5).
+  CDN: https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js
+
+- Do NOT remove the /api/dev-wallet sync logic — it is what
+  makes approvals work in development without MetaMask.
+
+- The "Confirm & Sign" button must call signAndApprove() using
+  the approval's id and approverDID from /api/approvals.
+
+============================================================
