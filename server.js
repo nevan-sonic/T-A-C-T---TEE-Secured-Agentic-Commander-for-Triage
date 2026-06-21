@@ -175,7 +175,21 @@ app.post("/api/register-active-did", (req, res) => {
     res.status(400).json({ error: "Invalid DID format" });
 });
 
-// REST Endpoints
+// [Dev-only] Expose the server's active signing private key so the browser dashboard
+// can sync its local fallback wallet — prevents "address mismatch" when test runners
+// (e.g. verify-triggers.js) register a different DID than the browser's random key.
+// This endpoint is intentionally local-only (no auth token needed in dev, never for prod).
+app.get("/api/dev-wallet", (req, res) => {
+    const privateKey = process.env.T3N_API_KEY || process.env.T3_PRIVATE_KEY || null;
+    if (!privateKey) {
+        return res.json({ privateKey: null, did: activeBrowserDID });
+    }
+    const wallet = new ethers.Wallet(privateKey);
+    const did = "did:t3n:" + wallet.address.toLowerCase().replace("0x", "");
+    res.json({ privateKey, did });
+});
+
+
 app.post("/api/webhook", async (req, res) => {
     let rawAlert = req.body;
     let alert = null;
