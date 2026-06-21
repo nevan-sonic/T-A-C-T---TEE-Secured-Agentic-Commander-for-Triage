@@ -25,6 +25,10 @@ app.use(express.static(path.join(__dirname, "public")));
 const rateLimitMap = new Map();
 app.use((req, res, next) => {
     const ip = req.ip || req.connection.remoteAddress || "unknown";
+    // Exempt localhost from rate limiting to ensure smooth local demos
+    if (ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1" || ip.includes("127.0.0.1")) {
+        return next();
+    }
     const now = Date.now();
     const window = rateLimitMap.get(ip) || { count: 0, resetAt: now + 60000 };
     if (now > window.resetAt) {
