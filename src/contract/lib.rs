@@ -81,15 +81,25 @@ fn github_headers(token: &str) -> Vec<(String, String)> {
     ]
 }
 
-fn aws_mock_call(access_key: &str, secret_key: &str) -> Result<String, String> {
+fn aws_placeholder_call() -> Result<String, String> {
+    use crate::host::interfaces::http_with_placeholders;
+
     let url = "https://ec2.us-east-1.amazonaws.com/?Action=DescribeInstances";
     let headers = vec![
-        ("X-Aws-Access-Key".to_string(), access_key.to_string()),
-        ("X-Aws-Secret-Key".to_string(), secret_key.to_string()),
+        ("X-Aws-Access-Key".to_string(), "{{profile.aws_access_key_id}}".to_string()),
+        ("X-Aws-Secret-Key".to_string(), "{{profile.aws_secret_access_key}}".to_string()),
         ("Content-Type".to_string(), "application/xml".to_string()),
     ];
-    let resp = http_request(http::Verb::Get, url, Some(headers), None)?;
-    Ok(format!("AWS HTTP code: {}", resp.code))
+    let req = http_with_placeholders::Request {
+        method: "GET".to_string(),
+        url: url.to_string(),
+        headers: Some(headers),
+        body: None,
+    };
+    match http_with_placeholders::call(&req) {
+        Ok(resp) => Ok(format!("AWS HTTP code: {}", resp.code)),
+        Err(e) => Err(format!("{:?}", e)),
+    }
 }
 
 impl Guest for Component {
@@ -105,14 +115,10 @@ impl Guest for Component {
         let model = input_json["model"].as_str().unwrap_or("llama-3.3-70b-versatile");
 
         if system_prompt == "aws:remediate" {
-            info("[TEE Enclave] Executing cost anomaly remediation in enclave...");
-            let access_key = get_secret_key("aws_access_key_id").unwrap_or_default();
-            let secret_key = get_secret_key("aws_secret_access_key").unwrap_or_default();
-            if !access_key.is_empty() && !access_key.starts_with("AKIAIOSFODNN") {
-                // If it is a real key, initiate the mock/real API call
-                if let Err(e) = aws_mock_call(&access_key, &secret_key) {
-                    info(&format!("[TEE Enclave] AWS Mock HTTP failed: {}", e));
-                }
+            info("[TEE Enclave] Executing cost anomaly remediation in enclave via placeholder injection...");
+            match aws_placeholder_call() {
+                Ok(msg) => info(&format!("[TEE Enclave] {}", msg)),
+                Err(e) => info(&format!("[TEE Enclave] AWS Placeholder HTTP failed: {}", e)),
             }
             let res = serde_json::json!({ "executed": true, "command": user_prompt });
             return serde_json::to_vec(&res).map_err(|e| e.to_string());

@@ -14,7 +14,7 @@ if (!process.env.T3N_CONTRACT_ID) {
     console.log("============================================================\n");
     try {
         const { execSync } = require("child_process");
-        execSync("node scratch/register-contract.js", { stdio: "inherit" });
+        execSync("node scripts/register-contract.js", { stdio: "inherit" });
         // Reload environment variables to pick up T3N_CONTRACT_ID written by the script
         dotenv.config({ override: true });
         console.log(`[Starlight Startup] Reloaded config. T3N_CONTRACT_ID=${process.env.T3N_CONTRACT_ID}`);
@@ -23,7 +23,7 @@ if (!process.env.T3N_CONTRACT_ID) {
         console.error("⚠️  [T3N REGISTRATION WARNING] Auto-registration failed!");
         console.error(`Reason: ${regErr.message}`);
         console.error("Please ensure your account (c8eb415587d29e3155bb615149156b0ce5f2ecc5) has credit.");
-        console.error("Or run manually using: node scratch/register-contract.js");
+        console.error("Or run manually using: node scripts/register-contract.js");
         console.error("Proceeding with Local Enclave Simulation fallback mode...");
         console.error("============================================================\n");
     }
