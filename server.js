@@ -146,23 +146,26 @@ try {
     console.error("[Control Plane] Warning: Compiled modules not found. Run 'npm run compile' first to generate JS outputs.");
 }
 
-// Track the latest active DID from the browser dashboard
-let activeBrowserDID = process.env.ACTIVE_BROWSER_DID || process.env.ONCALL_ENGINEER_DID || "";
+// Canonical approver DID is always derived from the configured env key — never overwritten by browser sessions
+const canonicalKey = process.env.T3N_API_KEY || process.env.T3_PRIVATE_KEY || null;
+let activeBrowserDID = process.env.ONCALL_ENGINEER_DID || process.env.APPROVER_DID || "";
+if (!activeBrowserDID && canonicalKey) {
+    const derived = new ethers.Wallet(canonicalKey).address.toLowerCase();
+    activeBrowserDID = "did:t3n:" + derived.replace("0x", "");
+}
 if (!activeBrowserDID) {
-    const randomKey = ethers.Wallet.createRandom().privateKey;
-    const key = process.env.T3N_API_KEY || process.env.T3_PRIVATE_KEY || randomKey;
-    const derived = new ethers.Wallet(key).address.toLowerCase();
+    // absolute last resort — random wallet
+    const derived = new ethers.Wallet(ethers.Wallet.createRandom().privateKey).address.toLowerCase();
     activeBrowserDID = "did:t3n:" + derived.replace("0x", "");
 }
 
 app.post("/api/register-active-did", (req, res) => {
     const { did } = req.body;
     if (did && (did.startsWith("did:t3n:") || did.startsWith("did:t3:"))) {
-        activeBrowserDID = did;
-        process.env.ACTIVE_BROWSER_DID = did;
-        console.log(`[Control Plane] Registered active browser DID: ${activeBrowserDID}`);
+        // Do NOT overwrite activeBrowserDID or ACTIVE_BROWSER_DID — the canonical approver
+        // is locked to the env-configured wallet. We only seed enclave secrets for this DID.
+        console.log(`[Control Plane] Browser session DID noted (not overwriting approver): ${did}`);
         
-        // Seed z-namespace secrets for this DID
         const matches = did.match(/did:t3n:([0-9a-fA-F]+)/) || did.match(/did:t3:user:([0-9a-fA-F]+)/);
         if (matches && enclaveSimulator) {
             const tid = matches[1].toLowerCase();
@@ -174,6 +177,7 @@ app.post("/api/register-active-did", (req, res) => {
     }
     res.status(400).json({ error: "Invalid DID format" });
 });
+
 
 // [Dev-only] Expose the server's active signing private key so the browser dashboard
 // can sync its local fallback wallet — prevents "address mismatch" when test runners

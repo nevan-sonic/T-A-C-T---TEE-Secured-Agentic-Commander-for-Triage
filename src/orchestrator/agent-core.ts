@@ -302,7 +302,7 @@ export async function handleIncident(alert: Alert, autoMode: boolean = false): P
         if (config.approvalsRequired > 0) {
             const approvers = config.approvalsRequired === 1 
                 ? [alert.codeOwnerDID] 
-                : [alert.codeOwnerDID, process.env.ACTIVE_BROWSER_DID || "did:t3:user:charlie"];
+                : [alert.codeOwnerDID, process.env.APPROVER_DID || process.env.ONCALL_ENGINEER_DID || "did:t3:user:charlie"];
             
             await notifySlack(`⏳ *Awaiting Cryptographic Signatures:* ${config.approvalsRequired} signatures required from: ${JSON.stringify(approvers)}`);
             

@@ -39,7 +39,7 @@ export async function handleCostAnomalyIncident(alert: CostAnomalyAlert): Promis
 
     // Create incident entry
     const triggeredTime = Date.now();
-    const finOpsDID = process.env.ACTIVE_BROWSER_DID || "did:t3:user:finops";
+    const finOpsDID = process.env.FINOPS_DID || process.env.APPROVER_DID || "did:t3:user:finops";
 
     const incidentAlert: Alert = {
         id: alert.id,
@@ -135,7 +135,7 @@ export async function handleCostAnomalyIncident(alert: CostAnomalyAlert): Promis
 
         // Step 5: Execute remediations with tiered approvals
         incident.status = "Executing Remediations";
-        const financeLeadDID = process.env.ACTIVE_BROWSER_DID || "did:t3:user:finance-lead";
+        const financeLeadDID = process.env.FINANCE_LEAD_DID || process.env.APPROVER_DID || "did:t3:user:finance-lead";
         let totalSaving = 0;
         const executedActions: string[] = [];
 

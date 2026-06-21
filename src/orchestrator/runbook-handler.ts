@@ -51,8 +51,8 @@ export async function handleRunbookIncident(alert: RunbookAlert): Promise<void> 
             `Details: ${alert.details || "N/A"}`,
             `Service: ${alert.service}`
         ],
-        onCallEngineerDID: process.env.ACTIVE_BROWSER_DID || "did:t3:user:oncall-engineer",
-        codeOwnerDID: process.env.ACTIVE_BROWSER_DID || "did:t3:user:oncall-engineer"
+        onCallEngineerDID: process.env.ONCALL_ENGINEER_DID || process.env.APPROVER_DID || "did:t3:user:oncall-engineer",
+        codeOwnerDID: process.env.ONCALL_ENGINEER_DID || process.env.APPROVER_DID || "did:t3:user:oncall-engineer"
     };
 
     activeIncidents.set(alert.id, {
@@ -77,7 +77,7 @@ export async function handleRunbookIncident(alert: RunbookAlert): Promise<void> 
         const session = await agent.handshake();
         incident.session = session;
 
-        const oncallDID = process.env.ACTIVE_BROWSER_DID || "did:t3:user:oncall-engineer";
+        const oncallDID = process.env.ONCALL_ENGINEER_DID || process.env.APPROVER_DID || "did:t3:user:oncall-engineer";
 
         // Step 2: Fetch/parse runbook content
         incident.status = "Fetching Runbook";
