@@ -186,11 +186,8 @@ class EnclaveSimulator {
         // Extract address from DID: did:t3n:<eth_address_hex>
         const matches = approval.approverDID.match(/did:t3n:([0-9a-fA-F]+)/) || approval.approverDID.match(/did:t3:user:([0-9a-fA-F]+)/) || approval.approverDID.match(/did:t3:user:(\w+)/);
         if (!matches) {
-            console.log(`[TEE Delegator] Warning: Approver DID is non-hex or custom. Verification skipped, auto-approving.`);
-            approval.status = "approved";
-            approval.signature = signature;
-            approval.signedAt = Date.now();
-            return true;
+            console.log(`[TEE Delegator] Cryptographic validation FAILED: Approver DID is non-hex or custom.`);
+            return false;
         }
 
         const expectedAddressHex = matches[1];
@@ -198,11 +195,8 @@ class EnclaveSimulator {
 
         // Auto-approve if expectedAddress is not a valid Ethereum address
         if (!ethers.isAddress(expectedAddress)) {
-            console.log(`[TEE Delegator] Warning: Expected address '${expectedAddress}' is not a valid Ethereum address. Verification skipped, auto-approving.`);
-            approval.status = "approved";
-            approval.signature = signature;
-            approval.signedAt = Date.now();
-            return true;
+            console.log(`[TEE Delegator] Cryptographic validation FAILED: Expected address '${expectedAddress}' is not a valid Ethereum address.`);
+            return false;
         }
 
         // Standard EIP-191 personal_sign verification
@@ -232,12 +226,18 @@ class EnclaveSimulator {
                 return false;
             }
         } catch (e) {
-            console.log(`[TEE Verification] Crypto verification error: ${e}. Defaulting to mock signature verify for demo.`);
-            approval.status = "approved";
-            approval.signature = signature;
-            approval.signedAt = Date.now();
-            return true;
+            console.log(`[TEE Verification] Crypto verification error: ${e}. Validation FAILED.`);
+            return false;
         }
+    }
+
+    public verifyCredential(did: string, credential: string): boolean {
+        for (const app of this.approvals.values()) {
+            if (app.status === "approved" && app.approverDID.toLowerCase() === did.toLowerCase() && app.signature === credential) {
+                return true;
+            }
+        }
+        return false;
     }
 }
 

@@ -253,6 +253,7 @@ Affected file content: ${cveAlert.vulnerableCode || "not provided"}`;
 
         const content = chatCompletion.choices[0]?.message?.content;
         if (!content) throw new Error("Empty response from Groq");
+        console.log(`[Groq LLM] Raw CVE Response: ${content}`);
 
         const parsed = JSON.parse(content) as CVEAnalysisResult;
         console.log(`[Groq LLM] CVE analysis complete for ${cveAlert.cveId}.`);
