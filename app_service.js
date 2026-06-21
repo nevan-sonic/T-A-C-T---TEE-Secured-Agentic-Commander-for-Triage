@@ -3,9 +3,9 @@ const poolConfig = {
   host: "localhost",
   port: 5432,
   database: "production_db",
-  // Database connection limit
+  // Database connection limit increased to handle high traffic
   max: 100,
-  idleTimeoutMillis: 30000,
+  idleTimeoutMillis: 10000,
   connectionTimeoutMillis: 5000,
 };
 const dbPool = new Pool(poolConfig);
