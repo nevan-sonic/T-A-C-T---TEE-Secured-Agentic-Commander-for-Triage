@@ -10,6 +10,7 @@ export interface LedgerEntry {
     targetCommit?: string;
     timestamp: number;
     details?: string;
+    metadata?: Record<string, unknown>;
 }
 
 export interface MapConfig {
@@ -28,15 +29,20 @@ export interface PendingApproval {
     signedAt?: number;
 }
 
+// Maximum value length for KV store entries (prevents memory abuse)
+const MAX_VALUE_LENGTH = 64 * 1024; // 64 KB
+const MAX_KEY_LENGTH = 256;
+
 class EnclaveSimulator {
     private kvStore: Map<string, Map<string, string>> = new Map();
     private mapsConfig: Map<string, MapConfig> = new Map();
     private ledger: LedgerEntry[] = [];
     private approvals: Map<string, PendingApproval> = new Map();
-    
+    private didToAddressMap: Map<string, string> = new Map();
+
     // Counter for allocating numeric Contract IDs
     private nextContractId: number = 1000;
-    
+
     constructor() {
         // Initialize default system maps
         this.kvStore.set("users", new Map());
@@ -44,26 +50,70 @@ class EnclaveSimulator {
         this.kvStore.set("dids", new Map());
     }
 
+    public registerDidAddress(did: string, address: string) {
+        this.didToAddressMap.set(did.toLowerCase(), address.toLowerCase());
+        console.log(`[TEE Enclave] Registered DID mapping: ${did.toLowerCase()} -> ${address.toLowerCase()}`);
+    }
+
+    public getAddressForDid(did: string): string {
+        const mapped = this.didToAddressMap.get(did.toLowerCase());
+        if (mapped) return mapped;
+        
+        const matches = did.match(/did:t3n:([0-9a-fA-F]+)/) || did.match(/simulatedFallbackDid:\w+:([0-9a-fA-F]+)/) || did.match(/did:t3:user:([0-9a-fA-F]+)/);
+        if (matches) {
+            const hex = matches[1];
+            return hex.startsWith("0x") ? hex : "0x" + hex;
+        }
+        return "";
+    }
+
     public allocateContractId(): number {
         this.nextContractId += 1;
         return this.nextContractId;
     }
 
+    // [Security] Input sanitization for map names
+    private sanitizeMapName(name: string): string {
+        // Only allow alphanumeric, colons, hyphens, underscores, and dots
+        return name.replace(/[^a-zA-Z0-9:_\-\.]/g, "");
+    }
+
+    // [Security] Input validation for keys and values
+    private validateKey(key: string): void {
+        if (!key || key.length === 0) {
+            throw new Error("[Security] Empty key not allowed");
+        }
+        if (key.length > MAX_KEY_LENGTH) {
+            throw new Error(`[Security] Key exceeds maximum length of ${MAX_KEY_LENGTH}`);
+        }
+    }
+
+    private validateValue(value: string): void {
+        if (value && value.length > MAX_VALUE_LENGTH) {
+            throw new Error(`[Security] Value exceeds maximum length of ${MAX_VALUE_LENGTH} bytes`);
+        }
+    }
+
     public createMap(tid: string, mapTail: string, visibility: "private" | "public", writers: string[], readers: string[]) {
-        const canonicalName = `z:${tid}:${mapTail}`;
+        const sanitizedTail = this.sanitizeMapName(mapTail);
+        const canonicalName = `z:${tid}:${sanitizedTail}`;
         if (this.mapsConfig.has(canonicalName)) {
             console.log(`[TEE Enclave] Info: Map '${canonicalName}' already exists. Idempotent call.`);
             return;
         }
-        
+
         this.mapsConfig.set(canonicalName, { visibility, writers, readers });
         this.kvStore.set(canonicalName, new Map());
         console.log(`[TEE Enclave] Created Map: ${canonicalName} (Visibility: ${visibility}, Readers: ${JSON.stringify(readers)}, Writers: ${JSON.stringify(writers)})`);
     }
 
     // Seeding secrets bypasses writers ACL (Control plane call)
-    public setMapEntry(tid: string, mapTail: string, key: string, value: string) {
-        const canonicalName = `z:${tid}:${mapTail}`;
+    public setMapEntry(tid: string, mapTail: string, key: string, value: string, readerContractIds?: string[]) {
+        this.validateKey(key);
+        this.validateValue(value);
+
+        const sanitizedTail = this.sanitizeMapName(mapTail);
+        const canonicalName = `z:${tid}:${sanitizedTail}`;
         if (!this.kvStore.has(canonicalName)) {
             this.kvStore.set(canonicalName, new Map());
         }
@@ -72,19 +122,23 @@ class EnclaveSimulator {
     }
 
     public getMapEntry(tid: string, mapTail: string, key: string, callerContractId: string): string | null {
-        const canonicalName = `z:${tid}:${mapTail}`;
+        this.validateKey(key);
+
+        const sanitizedTail = this.sanitizeMapName(mapTail);
+        const canonicalName = `z:${tid}:${sanitizedTail}`;
         const config = this.mapsConfig.get(canonicalName);
-        
+
         if (!config) {
             throw new Error(`Platform Error: Map not found - '${canonicalName}'`);
         }
-        
+
         // Enforce KV Governor ACL checks
         const canRead = config.readers.includes(callerContractId) || config.readers.includes("*");
         if (!canRead) {
+            console.log(`[Security] Access denied: contract '${callerContractId}' cannot read map '${canonicalName}'`);
             throw new Error(`access denied: contract '${callerContractId}' cannot read map '${canonicalName}'`);
         }
-        
+
         const map = this.kvStore.get(canonicalName);
         if (!map) return null;
         return map.get(key) || null;
@@ -92,6 +146,17 @@ class EnclaveSimulator {
 
     public writeLedger(entry: LedgerEntry) {
         this.ledger.push(entry);
+        // Also store in z-namespace audit-ledger map for T3N ADK compliance
+        if (entry.incidentId) {
+            const tid = entry.actor.match(/did:t3n:([0-9a-fA-F]+)/)?.[1]?.toLowerCase() || "system";
+            const ledgerKey = `log_${entry.timestamp}_${entry.action}`;
+            const ledgerMapName = `z:${tid}:audit-ledger`;
+            if (!this.kvStore.has(ledgerMapName)) {
+                this.kvStore.set(ledgerMapName, new Map());
+                this.mapsConfig.set(ledgerMapName, { visibility: "public", writers: ["1001"], readers: ["*"] });
+            }
+            this.kvStore.get(ledgerMapName)!.set(ledgerKey, JSON.stringify(entry));
+        }
         console.log(`[TEE Audit Ledger] Write SUCCESS: ${entry.action} by ${entry.actor} at ${new Date(entry.timestamp).toISOString()}`);
     }
 
@@ -99,7 +164,10 @@ class EnclaveSimulator {
         return [...this.ledger];
     }
 
+    // [Security] Validate approval ID format before creating
     public createPendingApproval(id: string, approverDID: string, scope: string, metadata: any): PendingApproval {
+        this.validateKey(id);
+
         const approval: PendingApproval = {
             id,
             approverDID,
@@ -126,56 +194,82 @@ class EnclaveSimulator {
             throw new Error("Approval request not found");
         }
 
-        // Verify the Ethereum personal sign signature
-        // Extract address from DID: did:t3n:<eth_address_hex>
-        // E.g., did:t3n:c8eb415587d29e3155bb615149156b0ce5f2ecc5
-        const matches = approval.approverDID.match(/did:t3n:([0-9a-fA-F]+)/) || approval.approverDID.match(/did:t3:user:([0-9a-fA-F]+)/) || approval.approverDID.match(/did:t3:user:(\w+)/);
-        if (!matches) {
-            console.log(`[TEE Delegator] Warning: Approver DID is non-hex or custom. Verification skipped, auto-approving.`);
-            approval.status = "approved";
-            approval.signature = signature;
-            approval.signedAt = Date.now();
-            return true;
+        // [Security] Validate signature is non-empty and reasonable length
+        if (!signature || signature.length < 10 || signature.length > 1000) {
+            console.log(`[Security] Invalid signature length for approval ${id}`);
+            return false;
         }
 
-        const expectedAddressHex = matches[1];
-        let expectedAddress = expectedAddressHex.startsWith("0x") ? expectedAddressHex : "0x" + expectedAddressHex;
-        
+        // Verify the Ethereum personal sign signature
+        const expectedAddress = this.getAddressForDid(approval.approverDID);
+
         // Auto-approve if expectedAddress is not a valid Ethereum address
-        if (!ethers.isAddress(expectedAddress)) {
-            console.log(`[TEE Delegator] Warning: Expected address '${expectedAddress}' is not a valid Ethereum address. Verification skipped, auto-approving.`);
-            approval.status = "approved";
-            approval.signature = signature;
-            approval.signedAt = Date.now();
-            return true;
+        if (!expectedAddress || !ethers.isAddress(expectedAddress)) {
+            console.log(`[TEE Delegator] Cryptographic validation FAILED: Expected address '${expectedAddress}' is not a valid Ethereum address.`);
+            return false;
         }
-        
+
         // Standard EIP-191 personal_sign verification
         try {
-            // E.g., message challenge: "Verify identity for incident resolution: <id>"
-            const message = `Verify identity for incident resolution: ${id}`;
-            const recoveredAddress = ethers.verifyMessage(message, signature);
-            
-            console.log(`[TEE Verification] Recovered address: ${recoveredAddress}, Expected: ${expectedAddress}`);
-            
-            if (recoveredAddress.toLowerCase() === expectedAddress.toLowerCase()) {
+            // Format A: Standard Structured Authorization Grant (T3N SDK compliant format)
+            const matches = approval.approverDID.match(/did:t3n:([0-9a-fA-F]+)/) || approval.approverDID.match(/simulatedFallbackDid:\w+:([0-9a-fA-F]+)/) || approval.approverDID.match(/did:t3:user:([0-9a-fA-F]+)/);
+            const tid = matches ? matches[1].toLowerCase() : expectedAddress.toLowerCase().replace("0x", "");
+            const standardMessage = `T3 Agent Authorization Grant\nAgent DID: did:t3:agent:department-of-incidents\nContract: z:${tid}:incident-contracts\nFunction: ${approval.scope}\nOutbound Hosts: api.github.com\nApproval ID: ${id}`;
+            const recoveredAddressStandard = ethers.verifyMessage(standardMessage, signature);
+
+            // Format B: Fallback/Simplified format (as constructed by the browser dashboard)
+            const fallbackMessage = `T3 Agent Authorization Grant\nAgent DID: did:t3:agent:department-of-incidents\nContract: z:system:incident-contracts\nFunction: incident-${id}\nApproval ID: ${id}`;
+            const recoveredAddressFallback = ethers.verifyMessage(fallbackMessage, signature);
+
+            console.log(`[TEE Verification] Recovered (Standard): ${recoveredAddressStandard}, Recovered (Fallback): ${recoveredAddressFallback}, Expected: ${expectedAddress}`);
+
+            const matchedStandard = recoveredAddressStandard.toLowerCase() === expectedAddress.toLowerCase();
+            const matchedFallback = recoveredAddressFallback.toLowerCase() === expectedAddress.toLowerCase();
+
+            if (matchedStandard || matchedFallback) {
                 approval.status = "approved";
                 approval.signature = signature;
                 approval.signedAt = Date.now();
                 console.log(`[TEE Verification] Cryptographic validation SUCCESS. Identity '${approval.approverDID}' verified.`);
                 return true;
             } else {
-                console.log(`[TEE Verification] Cryptographic validation FAILED. Recovered: ${recoveredAddress}, Expected: ${expectedAddress}`);
+                console.log(`[TEE Verification] Cryptographic validation FAILED. Recovered: Standard=${recoveredAddressStandard}, Fallback=${recoveredAddressFallback}, Expected: ${expectedAddress}`);
                 return false;
             }
         } catch (e) {
-            console.log(`[TEE Verification] Crypto verification error: ${e}. Defaulting to mock signature verify for demo.`);
-            // Mock verify: if signature matches some text
-            approval.status = "approved";
-            approval.signature = signature;
-            approval.signedAt = Date.now();
-            return true;
+            console.log(`[TEE Verification] Crypto verification error: ${e}. Validation FAILED.`);
+            return false;
         }
+    }
+
+    public verifyCredential(did: string, credential: string): boolean {
+        for (const app of this.approvals.values()) {
+            if (app.status === "approved" && app.approverDID.toLowerCase() === did.toLowerCase() && app.signature === credential) {
+                // Cryptographically re-verify the signature at validation/execution time
+                const expectedAddress = this.getAddressForDid(did);
+                if (!expectedAddress || !ethers.isAddress(expectedAddress)) continue;
+
+                try {
+                    const matches = did.match(/did:t3n:([0-9a-fA-F]+)/) || did.match(/simulatedFallbackDid:\w+:([0-9a-fA-F]+)/) || did.match(/did:t3:user:([0-9a-fA-F]+)/);
+                    const tid = matches ? matches[1].toLowerCase() : expectedAddress.toLowerCase().replace("0x", "");
+                    
+                    // Standard EIP-191 verification template matching approveRequest
+                    const standardMessage = `T3 Agent Authorization Grant\nAgent DID: did:t3:agent:department-of-incidents\nContract: z:${tid}:incident-contracts\nFunction: ${app.scope}\nOutbound Hosts: api.github.com\nApproval ID: ${app.id}`;
+                    const recoveredStandard = ethers.verifyMessage(standardMessage, credential);
+
+                    const fallbackMessage = `T3 Agent Authorization Grant\nAgent DID: did:t3:agent:department-of-incidents\nContract: z:system:incident-contracts\nFunction: incident-${app.id}\nApproval ID: ${app.id}`;
+                    const recoveredFallback = ethers.verifyMessage(fallbackMessage, credential);
+
+                    if (recoveredStandard.toLowerCase() === expectedAddress.toLowerCase() ||
+                        recoveredFallback.toLowerCase() === expectedAddress.toLowerCase()) {
+                        return true;
+                    }
+                } catch (e) {
+                    console.log(`[TEE Verification] Crypto verification failed inside verifyCredential: ${e}`);
+                }
+            }
+        }
+        return false;
     }
 }
 

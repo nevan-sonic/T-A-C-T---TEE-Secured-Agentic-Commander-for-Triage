@@ -1,0 +1,112 @@
+============================================================
+  T.A.C.T. — TEE-Secured Agentic Commander for Triage
+  REQUIREMENTS
+============================================================
+
+------------------------------------------------------------
+SYSTEM TOOLS  (install before anything else)
+------------------------------------------------------------
+
+1. Node.js  v18 or higher
+   Download: https://nodejs.org
+   Verify:   node --version
+
+2. npm  v9 or higher  (comes with Node.js)
+   Verify:  npm --version
+
+3. Git
+   Download: https://git-scm.com
+   Verify:   git --version
+
+4. Rust  (stable toolchain)
+   Install:  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+             (Windows: use rustup-init.exe from https://rustup.rs)
+   Verify:   rustc --version
+   NOTE: Only needed if you want to rebuild the WASM contract.
+         The compiled .wasm is already committed — skip Rust if
+         you just want to run the server.
+
+5. wasm32-wasip2 Rust target  (only if rebuilding contract)
+   Install:  rustup target add wasm32-wasip2
+
+6. wasm-tools  (only if rebuilding contract)
+   Install:  cargo install wasm-tools
+
+------------------------------------------------------------
+PROJECT SETUP  (run after cloning)
+------------------------------------------------------------
+
+   git clone https://github.com/nevan-sonic/T-A-C-T---TEE-Secured-Agentic-Commander-for-Triage.git
+   cd T-A-C-T---TEE-Secured-Agentic-Commander-for-Triage
+   npm install
+   npm run compile
+
+------------------------------------------------------------
+NODE.JS DEPENDENCIES  (auto-installed by npm install)
+------------------------------------------------------------
+
+   @terminal3/t3n-sdk   ^3.9.0   Terminal 3 agent SDK
+   @octokit/rest        ^20.1.1  GitHub API client
+   dotenv               ^16.4.5  .env file loader
+   ethers               ^6.13.1  Ethereum wallet / signature verification
+   express              ^4.19.2  HTTP server
+   groq-sdk             ^0.5.0   Groq LLM client
+
+   Dev dependencies:
+   typescript           ^5.4.5
+   @types/express       ^4.17.21
+   @types/node          ^20.12.12
+
+------------------------------------------------------------
+ENVIRONMENT VARIABLES  (.env file)
+------------------------------------------------------------
+
+   Copy .env.example to .env and fill in the values below.
+
+   REQUIRED:
+   ---------
+   T3N_API_KEY           Your Terminal 3 private key (hex, 0x-prefixed)
+   T3_PRIVATE_KEY        Same as T3N_API_KEY
+   T3N_TENANT_DID        Your Terminal 3 tenant DID  (did:t3n:<address>)
+   GROQ_API_KEY          Groq API key — https://console.groq.com
+   GITHUB_TOKEN          GitHub Personal Access Token (repo scope)
+   GITHUB_REPO           your-github-username/your-repo-name
+   ONCALL_ENGINEER_DID   did:t3n:<your_wallet_address>
+   APPROVER_DID          did:t3n:<your_wallet_address>
+   FINOPS_DID            did:t3n:<your_wallet_address>
+   SECURITY_LEAD_DID     did:t3n:<your_wallet_address>
+   FINANCE_LEAD_DID      did:t3n:<your_wallet_address>
+
+   OPTIONAL:
+   ---------
+   SLACK_WEBHOOK_URL     Slack incoming webhook URL (logs to console if blank)
+   GIT_REAL_EXECUTION    true = real git ops, false = mock (default: true)
+   T3_AGENT_DID          did:t3:agent:department-of-incidents
+
+   TIP: All *_DID engineer variables can be the same value —
+        derive from your T3N_API_KEY wallet address:
+        did:t3n:<lowercase_hex_wallet_address_without_0x>
+
+------------------------------------------------------------
+EXTERNAL ACCOUNTS  (sign up before filling .env)
+------------------------------------------------------------
+
+   Terminal 3 Testnet  https://terminal3.io  (free testnet account)
+   Groq Cloud          https://console.groq.com  (free tier available)
+   GitHub              https://github.com  (PAT with repo scope)
+   Slack               https://slack.com  (optional, for notifications)
+
+------------------------------------------------------------
+RUNNING THE SERVER
+------------------------------------------------------------
+
+   node server.js
+   → Dashboard: http://localhost:3000
+
+------------------------------------------------------------
+REBUILD WASM CONTRACT  (optional, only if you edit lib.rs)
+------------------------------------------------------------
+
+   npm run build:contract
+
+============================================================

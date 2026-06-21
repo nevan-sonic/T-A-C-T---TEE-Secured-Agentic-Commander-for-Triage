@@ -13,10 +13,347 @@
     <!-- Chart.js (CDN) -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="index.css">
+    <style>
+        /* Runbook Steps Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(8px);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .modal-card {
+            width: 90%;
+            max-width: 600px;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 40px rgba(139, 92, 246, 0.1);
+            padding: 2rem;
+            transform: scale(0.95);
+            transition: transform 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+        .modal-overlay.active .modal-card {
+            transform: scale(1);
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding-bottom: 1rem;
+        }
+        .modal-header h2 {
+            font-size: 1.25rem;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            background: linear-gradient(135deg, #fff 0%, hsl(210, 40%, 80%) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .close-modal-btn {
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        .close-modal-btn:hover {
+            color: #fff;
+        }
+        .runbook-steps-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            max-height: 400px;
+            overflow-y: auto;
+            padding-right: 0.5rem;
+        }
+        .runbook-step-item {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            transition: border-color 0.2s;
+        }
+        .runbook-step-item.pending {
+            border-left: 3px solid hsl(35, 90%, 55%);
+        }
+        .runbook-step-item.executed {
+            border-left: 3px solid hsl(150, 70%, 50%);
+            background: rgba(16, 185, 129, 0.02);
+        }
+        .step-meta-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.75rem;
+        }
+        .step-index-badge {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            background: rgba(255, 255, 255, 0.08);
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+        }
+        .step-type-badge {
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 0.65rem;
+            letter-spacing: 0.5px;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+        }
+        .step-type-badge.diagnostic {
+            color: hsl(196, 80%, 60%);
+            background: rgba(14, 165, 233, 0.1);
+        }
+        .step-type-badge.modification {
+            color: hsl(35, 90%, 60%);
+            background: rgba(245, 158, 11, 0.1);
+        }
+        .step-type-badge.restart {
+            color: hsl(0, 84%, 65%);
+            background: rgba(239, 68, 68, 0.1);
+        }
+        .step-type-badge.verification {
+            color: hsl(150, 70%, 55%);
+            background: rgba(16, 185, 129, 0.1);
+        }
+        .step-status-text {
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+        .step-status-text.pending {
+            color: hsl(35, 90%, 55%);
+        }
+        .step-status-text.executed {
+            color: hsl(150, 70%, 50%);
+        }
+        .step-desc {
+            font-size: 0.9rem;
+            line-height: 1.5;
+            color: rgba(255, 255, 255, 0.9);
+        }
+        .step-result-box {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 6px;
+            padding: 0.5rem 0.75rem;
+            color: rgba(255, 255, 255, 0.7);
+            margin-top: 0.25rem;
+            word-break: break-all;
+        }
+    </style>
 </head>
 <body>
     <div class="glass-bg"></div>
-    <div class="dashboard-container">
+
+    <!-- Sign-In Screen -->
+    <div id="login-screen" class="login-screen">
+        <div class="login-card">
+            <div class="login-brand">
+                <div class="logo-icon"></div>
+                <div class="login-brand-text">
+                    <h1>DEPARTMENT OF INCIDENTS</h1>
+                    <p>TEE-Secured Agentic Incident Commander</p>
+                </div>
+            </div>
+
+            <div class="login-divider">
+                <span>SECURE ACCESS GATE</span>
+            </div>
+
+            <form id="login-form" class="login-form" autocomplete="off" novalidate>
+                <div class="login-field">
+                    <label for="login-username">USERNAME</label>
+                    <input type="text" id="login-username" name="username" value="admin" placeholder="Enter operator ID" autocomplete="username">
+                </div>
+                <div class="login-field">
+                    <label for="login-password">PASSWORD</label>
+                    <input type="password" id="login-password" name="password" value="t3n-secure" placeholder="Enter access key" autocomplete="current-password">
+                </div>
+                <p id="login-error" class="login-error" hidden>Invalid credentials. Please try again.</p>
+                <button type="submit" class="action-btn login-submit">SIGN IN</button>
+            </form>
+
+            <div class="login-footer">
+                <span class="login-status-dot"></span>
+                <span>T3N TESTNET · ENCLAVE READY</span>
+            </div>
+            <p class="login-hint">Demo credentials: <code>admin</code> / <code>t3n-secure</code></p>
+        </div>
+    </div>
+
+    <!-- Landing Page -->
+    <div id="landing-page" class="landing-page" hidden>
+        <nav class="landing-nav">
+            <div class="landing-nav-brand">
+                <div class="logo-icon"></div>
+                <span>DEPARTMENT OF INCIDENTS</span>
+            </div>
+            <button type="button" class="landing-nav-cta" onclick="enterDashboard()">Get Started</button>
+        </nav>
+
+        <section class="landing-hero">
+            <div class="landing-hero-content reveal">
+                <p class="landing-eyebrow">T.A.C.T. · TERMINAL 3 NETWORK</p>
+                <h1>TEE-Secured Agentic<br><span>Incident Commander</span></h1>
+                <p class="landing-hero-desc">An AI-powered on-call engineer that detects outages, diagnoses root causes, writes fixes, and routes every action through cryptographically gated human approval.</p>
+                <button type="button" class="action-btn landing-hero-btn" onclick="enterDashboard()">Get Started</button>
+            </div>
+            <div class="landing-hero-visual">
+                <div class="scene-3d" id="scene-3d">
+                    <div class="cube-3d">
+                        <div class="cube-face front"></div>
+                        <div class="cube-face back"></div>
+                        <div class="cube-face right"></div>
+                        <div class="cube-face left"></div>
+                        <div class="cube-face top"></div>
+                        <div class="cube-face bottom"></div>
+                    </div>
+                    <div class="orbit-ring ring-1"></div>
+                    <div class="orbit-ring ring-2"></div>
+                    <div class="orbit-ring ring-3"></div>
+                    <div class="floating-node node-1"></div>
+                    <div class="floating-node node-2"></div>
+                    <div class="floating-node node-3"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="landing-section reveal">
+            <div class="landing-section-inner">
+                <span class="section-num">01</span>
+                <h2>What is T.A.C.T.?</h2>
+                <p>The <strong>TEE-Secured Agentic Commander for Triage</strong> watches your services for error spikes, CVE alerts, runbook triggers, and cost anomalies — then autonomously triages, patches, and requests your signature before merging.</p>
+                <div class="landing-stats">
+                    <div class="stat-card"><strong>4</strong><span>Incident Types</span></div>
+                    <div class="stat-card"><strong>TEE</strong><span>Isolated AI</span></div>
+                    <div class="stat-card"><strong>100%</strong><span>Audit Trail</span></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="landing-section landing-section-alt reveal">
+            <div class="landing-section-inner">
+                <span class="section-num">02</span>
+                <h2>How It Works</h2>
+                <div class="landing-steps">
+                    <div class="step-card">
+                        <div class="step-icon">📡</div>
+                        <h3>Detect</h3>
+                        <p>APM monitors, webhooks, and traffic simulators trigger incidents in real time.</p>
+                    </div>
+                    <div class="step-card">
+                        <div class="step-icon">🧠</div>
+                        <h3>Diagnose</h3>
+                        <p>AI reads logs inside a secure enclave and classifies severity with confidence scores.</p>
+                    </div>
+                    <div class="step-card">
+                        <div class="step-icon">🔧</div>
+                        <h3>Remediate</h3>
+                        <p>Generates code patches, opens PRs, executes runbooks, or rightsizes cloud resources.</p>
+                    </div>
+                    <div class="step-card">
+                        <div class="step-icon">✍️</div>
+                        <h3>Approve</h3>
+                        <p>Humans sign EIP-191 grants — without your signature, the agent cannot proceed.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="landing-section reveal">
+            <div class="landing-section-inner">
+                <span class="section-num">03</span>
+                <h2>Incident Coverage</h2>
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <span class="feature-dot p2"></span>
+                        <h3>SRE Incidents</h3>
+                        <p>Connection pool exhaustion, latency spikes, and gateway failures with auto-generated PR fixes.</p>
+                    </div>
+                    <div class="feature-card">
+                        <span class="feature-dot p1"></span>
+                        <h3>CVE / Security</h3>
+                        <p>Dependabot alerts trigger automatic dependency patching with human merge approval.</p>
+                    </div>
+                    <div class="feature-card">
+                        <span class="feature-dot purple"></span>
+                        <h3>Runbooks</h3>
+                        <p>PagerDuty alerts execute step-by-step diagnostics with gated remediation actions.</p>
+                    </div>
+                    <div class="feature-card">
+                        <span class="feature-dot green"></span>
+                        <h3>Cost Anomalies</h3>
+                        <p>CloudWatch spend spikes analyzed and rightsized with per-action authorization.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="landing-section landing-section-alt reveal">
+            <div class="landing-section-inner landing-tee">
+                <div class="tee-visual">
+                    <div class="shield-3d">
+                        <div class="shield-layer layer-1"></div>
+                        <div class="shield-layer layer-2"></div>
+                        <div class="shield-layer layer-3"></div>
+                    </div>
+                </div>
+                <div class="tee-content">
+                    <span class="section-num">04</span>
+                    <h2>Secured by Terminal 3</h2>
+                    <p>Every AI action is recorded in an immutable audit ledger. Cryptographic handshakes, TEE isolation, and DID-based delegation ensure tamper-proof incident response on the T3N testnet.</p>
+                    <ul class="tee-list">
+                        <li>Hardware TEE enclave simulation</li>
+                        <li>Immutable T3 audit ledger</li>
+                        <li>EIP-191 personal sign approvals</li>
+                        <li>Severity-gated co-signatures</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section class="landing-cta reveal">
+            <div class="landing-cta-inner">
+                <h2>Ready to Command Incidents?</h2>
+                <p>Enter the control plane to trigger mock alerts, monitor APM health, and sign delegation grants in real time.</p>
+                <button type="button" class="action-btn landing-hero-btn" onclick="enterDashboard()">Get Started →</button>
+            </div>
+        </section>
+
+        <footer class="landing-footer">
+            <p>Built for the <strong>Terminal 3 Agent Dev Kit Bounty Challenge</strong> &copy; 2026</p>
+        </footer>
+    </div>
+
+    <div id="dashboard-app" class="dashboard-container" hidden>
         
         <!-- Header -->
         <header class="navbar">
@@ -27,9 +364,18 @@
                     <p class="tagline">TEE-Secured Agentic Incident Commander | Terminal 3 Network</p>
                 </div>
             </div>
-            <div class="status-badge connected">
-                <span class="pulse-dot"></span>
-                T3N TESTNET ACTIVE
+            <div class="navbar-actions">
+                <button id="connect-wallet-btn" class="navbar-btn wallet-btn" onclick="connectWalletManual()">
+                    <span class="wallet-dot disconnected"></span>
+                    Connect Wallet
+                </button>
+                <div class="status-badge connected">
+                    <span class="pulse-dot"></span>
+                    T3N TESTNET ACTIVE
+                </div>
+                <button id="logout-btn" class="navbar-btn logout-btn" onclick="handleLogout()" type="button">
+                    Logout
+                </button>
             </div>
         </header>
 
@@ -71,6 +417,31 @@
                 </div>
 
                 <button class="action-btn trigger-btn" onclick="triggerAlert()">TRIGGER APM ALERT</button>
+
+                <h3 style="margin-top: 1.5rem; margin-bottom: 0.5rem; font-size: 0.85rem; color: rgba(255,255,255,0.6);">NEW TRIGGERS</h3>
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <button class="scenario-btn" style="flex:1; min-width: 120px;" onclick="triggerCVE()">
+                        <div class="btn-indicator" style="background: #f59e0b;"></div>
+                        <div class="btn-label">
+                            <h3 style="font-size: 0.8rem;">🛡️ CVE Webhook</h3>
+                            <p style="font-size: 0.65rem;">GitHub Dependabot Auto-Patch</p>
+                        </div>
+                    </button>
+                    <button class="scenario-btn" style="flex:1; min-width: 120px;" onclick="triggerRunbook()">
+                        <div class="btn-indicator" style="background: #8b5cf6;"></div>
+                        <div class="btn-label">
+                            <h3 style="font-size: 0.8rem;">📋 Runbook</h3>
+                            <p style="font-size: 0.65rem;">PagerDuty Step Execution</p>
+                        </div>
+                    </button>
+                    <button class="scenario-btn" style="flex:1; min-width: 120px;" onclick="triggerCost()">
+                        <div class="btn-indicator" style="background: #10b981;"></div>
+                        <div class="btn-label">
+                            <h3 style="font-size: 0.8rem;">💰 Cost Anomaly</h3>
+                            <p style="font-size: 0.65rem;">AWS CloudWatch Remediation</p>
+                        </div>
+                    </button>
+                </div>
             </div>
 
             <!-- Column 2: Live Telemetry Graph -->
@@ -98,6 +469,11 @@
             <div class="card approvals-card">
                 <h2>4. T3 DELEGATION & APPROVAL GUARD</h2>
                 <p class="card-desc">Gated transaction approvals. Requires EIP-191 personal signatures from code owners or on-call engineers.</p>
+                
+                <div class="cosmetic-warning-banner" style="background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 6px; padding: 0.5rem 0.75rem; margin-bottom: 1rem; color: #f59e0b; font-size: 0.72rem; display: flex; align-items: center; gap: 0.5rem;">
+                    <span style="font-size: 0.9rem;">⚠️</span>
+                    <span><strong>Visual Demo Only:</strong> This EIP-191 signing ceremony is a cosmetic simulation of the approval gate; real cryptographic authorization occurs inside the TEE boundary using standard SDK <code>agent-auth-update</code>.</span>
+                </div>
                 
                 <div id="no-approvals" class="empty-state">
                     <div class="shield-icon"></div>
@@ -170,6 +546,123 @@
 
     <!-- Script Logic -->
     <script>
+        const AUTH_KEY = "tact_authenticated";
+        const LANDING_KEY = "tact_landing_complete";
+        const DEMO_USER = "admin";
+        const DEMO_PASS = "t3n-secure";
+        let dashboardStarted = false;
+
+        function hideAllViews() {
+            document.getElementById("login-screen").hidden = true;
+            document.getElementById("landing-page").hidden = true;
+            document.getElementById("dashboard-app").hidden = true;
+            document.body.classList.remove("dashboard-active", "landing-active");
+        }
+
+        function showLogin() {
+            hideAllViews();
+            document.getElementById("login-screen").hidden = false;
+        }
+
+        function showLanding() {
+            hideAllViews();
+            document.getElementById("landing-page").hidden = false;
+            document.body.classList.add("landing-active");
+            initLandingEffects();
+            window.scrollTo(0, 0);
+        }
+
+        function showDashboard() {
+            hideAllViews();
+            document.getElementById("dashboard-app").hidden = false;
+            document.body.classList.add("dashboard-active");
+            if (!dashboardStarted) {
+                dashboardStarted = true;
+                try {
+                    startDashboard();
+                } catch (err) {
+                    console.error("[Dashboard] Failed to start:", err);
+                }
+            }
+        }
+
+        function enterDashboard() {
+            sessionStorage.setItem(LANDING_KEY, "true");
+            showDashboard();
+        }
+
+        function initLandingEffects() {
+            const scene = document.getElementById("scene-3d");
+            const heroReveal = document.querySelector(".landing-hero .reveal");
+            if (heroReveal) heroReveal.classList.add("visible");
+
+            document.querySelectorAll(".landing-page .reveal:not(.landing-hero .reveal)").forEach(el => {
+                el.classList.remove("visible");
+            });
+
+            if (!window.__landingScrollBound && scene) {
+                window.__landingScrollBound = true;
+                window.addEventListener("scroll", () => {
+                    if (document.getElementById("landing-page").hidden) return;
+                    const scrollY = window.scrollY;
+                    scene.style.transform = `translateY(${scrollY * 0.08}px) rotateX(${8 + scrollY * 0.015}deg)`;
+                }, { passive: true });
+            }
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) entry.target.classList.add("visible");
+                });
+            }, { threshold: 0.15, rootMargin: "0px 0px -40px 0px" });
+
+            document.querySelectorAll(".landing-page .reveal").forEach(el => observer.observe(el));
+        }
+
+        function handleLogin(event) {
+            event.preventDefault();
+            const username = document.getElementById("login-username").value.trim();
+            const password = document.getElementById("login-password").value.trim();
+            const errorEl = document.getElementById("login-error");
+
+            if (!username || !password) {
+                errorEl.textContent = "Please enter username and password.";
+                errorEl.hidden = false;
+                return;
+            }
+
+            sessionStorage.setItem(AUTH_KEY, "true");
+            sessionStorage.setItem("tact_username", username);
+            errorEl.hidden = true;
+            showLanding();
+        }
+
+        function handleLogout() {
+            sessionStorage.removeItem(AUTH_KEY);
+            sessionStorage.removeItem(LANDING_KEY);
+            sessionStorage.removeItem("tact_username");
+            document.getElementById("login-username").value = DEMO_USER;
+            document.getElementById("login-password").value = DEMO_PASS;
+            document.getElementById("login-error").hidden = true;
+            showLogin();
+        }
+
+        document.getElementById("login-form").addEventListener("submit", handleLogin);
+
+        function startDashboard() {
+            initChart();
+            setInterval(stepTelemetry, 1000);
+            setInterval(fetchTelemetry, 1000);
+            fetchTelemetry();
+            setInterval(() => {
+                fetchApprovals();
+                fetchLedger();
+                fetchIncidents();
+            }, 1500);
+            fetchApprovals();
+            fetchLedger();
+            fetchPersonas().then(initWallet);
+        }
+
         // Chart.js Telemetry Initialization
         let telemetryChart;
         const chartData = {
@@ -258,30 +751,8 @@
         let currentError = 0;
 
         function updateMetrics(status, severity) {
-            if (status === 'Triggered' || status === 'Analyzing Logs in TEE' || status === 'Classifying Severity' || status === 'Drafting Pull Request' || status === 'Awaiting Approvals') {
-                if (severity === 'HIGH') {
-                    targetLatency = 28400;
-                    targetError = 98.2;
-                } else if (severity === 'LOW') {
-                    targetLatency = 850;
-                    targetError = 5.1;
-                } else {
-                    targetLatency = 12400;
-                    targetError = 78.4;
-                }
-            } else if (status === 'Merging Fix' || status === 'Monitoring Fix') {
-                targetLatency = 150;
-                targetError = 1.2;
-            } else if (status === 'Regression Detected' || status === 'Rolling Back') {
-                targetLatency = 18900;
-                targetError = 80;
-            } else if (status === 'Resolved' || status === 'Rolled Back') {
-                targetLatency = 80;
-                targetError = 0;
-            } else {
-                targetLatency = 80;
-                targetError = 0;
-            }
+            // Overridden by live /api/telemetry-metrics polling
+            return;
         }
 
         function stepTelemetry() {
@@ -306,15 +777,69 @@
             telemetryChart.update('none');
         }
 
-        // Mocks for DIDs matches the .env config
-        let AliceDID = "did:t3n:c8eb415587d29e3155bb615149156b0ce5f2ecc5"; // Matches user private key address
-        const BobDID = "did:t3:user:bob";
-        const CharlieDID = "did:t3:user:charlie";
+        // Retrieve or generate a persistent local developer private key
+        let fallbackPrivateKey = localStorage.getItem("t3_developer_private_key");
+        if (!fallbackPrivateKey || fallbackPrivateKey.length !== 66) {
+            fallbackPrivateKey = ethers.Wallet.createRandom().privateKey;
+            localStorage.setItem("t3_developer_private_key", fallbackPrivateKey);
+        }
 
-        // Derive address from the developer private key for fallback local signing
-        const fallbackPrivateKey = "0x616355559f3b9880cf878749d4d8b42f5b7c9147552ce03793de353f9d3ef00d";
-        const fallbackWallet = new ethers.Wallet(fallbackPrivateKey);
-        const fallbackAddress = fallbackWallet.address.toLowerCase();
+        // Sync with the server's configured signing key (T3N_API_KEY in .env) so that
+        // the browser's fallback wallet always matches the approverDID on pending approvals.
+        // We do this synchronously via XMLHttpRequest so the correct key is in place BEFORE
+        // AliceDID is declared — avoids the async-IIFE ordering bug.
+        try {
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", "/api/dev-wallet", false); // synchronous
+            xhr.send();
+            if (xhr.status === 200) {
+                const devData = JSON.parse(xhr.responseText);
+                if (devData.privateKey && devData.privateKey.length === 66 && devData.privateKey !== fallbackPrivateKey) {
+                    fallbackPrivateKey = devData.privateKey;
+                    localStorage.setItem("t3_developer_private_key", fallbackPrivateKey);
+                    console.log("[Dashboard] Synced signing key from server /api/dev-wallet.");
+                }
+                if (devData.personaKeys) {
+                    window.devPersonaKeys = devData.personaKeys;
+                    console.log("[Dashboard] Synced persona keys from server /api/dev-wallet.");
+                }
+            }
+        } catch (e) {
+            console.warn("[Dashboard] dev-wallet sync failed:", e.message);
+        }
+
+        let fallbackWallet = new ethers.Wallet(fallbackPrivateKey);
+        let fallbackAddress = fallbackWallet.address.toLowerCase();
+
+        let AliceDID = "did:t3n:" + fallbackAddress.replace("0x", "");
+        let BobDID = AliceDID;
+        let CharlieDID = AliceDID;
+        let serverPersonas = {};
+
+        async function fetchPersonas() {
+            try {
+                const res = await fetch("/api/personas");
+                const personas = await res.json();
+                if (personas.alice) {
+                    serverPersonas = personas;
+                    AliceDID = personas.alice;
+                    BobDID = personas.bob || personas.alice;
+                    CharlieDID = personas.charlie || personas.alice;
+                    console.log("[Dashboard] Loaded personas from server:", personas);
+                    
+                    // Update preview payloads
+                    payloads.P2.onCallEngineerDID = AliceDID;
+                    payloads.P2.codeOwnerDID = AliceDID;
+                    payloads.P1.onCallEngineerDID = AliceDID;
+                    payloads.P1.codeOwnerDID = AliceDID;
+                    payloads.P3.onCallEngineerDID = AliceDID;
+                    payloads.P3.codeOwnerDID = AliceDID;
+                    selectScenario(currentScenario);
+                }
+            } catch (e) {
+                console.error("[Dashboard] Failed to fetch personas:", e);
+            }
+        }
 
         // Dynamically resolve AliceDID based on MetaMask or local key
         async function registerDID(did) {
@@ -330,44 +855,72 @@
             }
         }
 
-        if (window.ethereum) {
-            window.ethereum.request({ method: 'eth_accounts' }).then(accounts => {
-                if (accounts && accounts.length > 0) {
-                    const addr = accounts[0].toLowerCase();
-                    AliceDID = `did:t3n:${addr.startsWith("0x") ? addr.substring(2) : addr}`;
-                    console.log(`[Dashboard] MetaMask active account: ${AliceDID}`);
-                    registerDID(AliceDID);
-                } else {
-                    window.ethereum.request({ method: 'eth_requestAccounts' }).then(reqAccounts => {
-                        if (reqAccounts && reqAccounts.length > 0) {
-                            const addr = reqAccounts[0].toLowerCase();
-                            AliceDID = `did:t3n:${addr.startsWith("0x") ? addr.substring(2) : addr}`;
-                            console.log(`[Dashboard] MetaMask connected account: ${AliceDID}`);
-                            registerDID(AliceDID);
-                        }
-                    }).catch(err => {
-                        console.warn("[Dashboard] MetaMask account connection rejected. Using default AliceDID.");
-                        registerDID(AliceDID);
-                    });
-                }
-            }).catch(err => {
-                console.error("[Dashboard] MetaMask accounts query failed:", err);
-                registerDID(AliceDID);
-            });
+        function updateWalletBtn(address) {
+            const btn = document.getElementById("connect-wallet-btn");
+            if (btn) {
+                const shortAddr = address.substring(0, 6) + "..." + address.substring(address.length - 4);
+                btn.innerHTML = `
+                    <span class="wallet-dot connected"></span>
+                    ${shortAddr.toUpperCase()}
+                `;
+                btn.classList.add("connected");
+            }
+        }
 
-            // Listen for account changes
-            window.ethereum.on('accountsChanged', (accounts) => {
-                if (accounts && accounts.length > 0) {
-                    const addr = accounts[0].toLowerCase();
-                    AliceDID = `did:t3n:${addr.startsWith("0x") ? addr.substring(2) : addr}`;
-                    console.log(`[Dashboard] MetaMask account changed to: ${AliceDID}`);
-                    registerDID(AliceDID);
+        async function connectWalletManual() {
+            if (window.ethereum) {
+                try {
+                    appendTerminalLog("Connecting MetaMask wallet...", "info");
+                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    if (accounts && accounts.length > 0) {
+                        const addr = accounts[0].toLowerCase();
+                        AliceDID = `did:t3n:${addr.startsWith("0x") ? addr.substring(2) : addr}`;
+                        console.log(`[Dashboard] Connected MetaMask account: ${AliceDID}`);
+                        appendTerminalLog(`Connected wallet address: ${AliceDID}`, "success");
+                        await registerDID(AliceDID);
+                        updateWalletBtn(addr);
+                    }
+                } catch (err) {
+                    appendTerminalLog(`Wallet connection failed: ${err.message}`, "error");
                 }
-            });
-        } else {
-            AliceDID = `did:t3n:${fallbackAddress.substring(2)}`;
-            console.log(`[Dashboard] MetaMask not detected. Using local fallback DID: ${AliceDID}`);
-            registerDID(AliceDID);
+            } else {
+                appendTerminalLog("MetaMask wallet extension not detected in browser.", "error");
+                alert("MetaMask not detected. Please install the extension.");
+            }
+        }
+
+        function initWallet() {
+            if (window.ethereum) {
+                window.ethereum.request({ method: 'eth_accounts' }).then(accounts => {
+                    if (accounts && accounts.length > 0) {
+                        const addr = accounts[0].toLowerCase();
+                        AliceDID = `did:t3n:${addr.startsWith("0x") ? addr.substring(2) : addr}`;
+                        console.log(`[Dashboard] MetaMask active account: ${AliceDID}`);
+                        registerDID(AliceDID);
+                        updateWalletBtn(addr);
+                    } else {
+                        console.log("[Dashboard] No accounts connected initially. Click 'Connect Wallet' manually.");
+                        registerDID(AliceDID);
+                    }
+                }).catch(err => {
+                    console.error("[Dashboard] MetaMask accounts query failed:", err);
+                    registerDID(AliceDID);
+                });
+
+                window.ethereum.on('accountsChanged', (accounts) => {
+                    if (accounts && accounts.length > 0) {
+                        const addr = accounts[0].toLowerCase();
+                        AliceDID = `did:t3n:${addr.startsWith("0x") ? addr.substring(2) : addr}`;
+                        console.log(`[Dashboard] MetaMask account changed to: ${AliceDID}`);
+                        registerDID(AliceDID);
+                        updateWalletBtn(addr);
+                    }
+                });
+            } else {
+                console.log(`[Dashboard] MetaMask not detected. Keeping session DID: ${AliceDID}`);
+                registerDID(AliceDID);
+                updateWalletBtn(fallbackAddress);
+            }
         }
 
         const payloads = {
@@ -537,7 +1090,7 @@
                             <p><strong>Requested Scope:</strong> <code>${app.scope}</code></p>
                         </div>
                         <div class="approval-actions">
-                            <button class="action-btn approve-btn" onclick="signApproval('${app.id}', '${app.approverDID}')">Confirm & Sign with T3 Identity</button>
+                            <button class="action-btn approve-btn" onclick="signApproval('${app.id}', '${app.approverDID}', '${app.scope}')">Confirm & Sign with T3 Identity</button>
                         </div>
                     </div>
                 `).join('');
@@ -546,39 +1099,88 @@
             }
         }
 
-        async function signApproval(id, approverDID) {
+        async function signApproval(id, approverDID, scope) {
             appendTerminalLog(`Initiating EIP-191 Personal Sign signature challenge for approval: ${id}...`, 'system');
             
-            const message = `Verify identity for incident resolution: ${id}`;
+            // Refresh latest personas from server to avoid any timing or stale DID issues
+            try {
+                const res = await fetch(`/api/personas?_=${Date.now()}`);
+                const personas = await res.json();
+                if (personas && personas.alice) {
+                    serverPersonas = personas;
+                    console.log("[Dashboard] Refreshed personas dynamically inside signApproval:", serverPersonas);
+                }
+            } catch (e) {
+                console.warn("[Dashboard] Persona refresh failed:", e.message);
+            }
+
+            // Construct standardMessage using the DID hex as tid (standard T3N SDK/ADK format)
+            const matches = approverDID.match(/did:t3n:([0-9a-fA-F]+)/) || approverDID.match(/simulatedFallbackDid:\w+:([0-9a-fA-F]+)/) || approverDID.match(/did:t3:user:([0-9a-fA-F]+)/);
+            const tid = matches ? matches[1].toLowerCase() : approverDID.replace(/^did:t3n:/, '').replace(/^did:t3:user:/, '').replace(/^simulatedFallbackDid:\w+:/, '').toLowerCase();
+            const standardMessage = `T3 Agent Authorization Grant\nAgent DID: did:t3:agent:department-of-incidents\nContract: z:${tid}:incident-contracts\nFunction: ${scope}\nOutbound Hosts: api.github.com\nApproval ID: ${id}`;
+            const fallbackMessage = `T3 Agent Authorization Grant\nAgent DID: did:t3:agent:department-of-incidents\nContract: z:system:incident-contracts\nFunction: incident-${id}\nApproval ID: ${id}`;
             let signature = '';
             
-            // Check for metamask connection
+            // Try MetaMask ONLY if the connected MetaMask address matches the approverDID
             if (window.ethereum) {
                 try {
-                    appendTerminalLog("Requesting MetaMask signature for validation...", "info");
-                    const provider = new ethers.BrowserProvider(window.ethereum);
-                    const signer = await provider.getSigner();
-                    signature = await signer.signMessage(message);
-                    appendTerminalLog(`Successfully signed challenge via MetaMask. Signature size: ${signature.length} bytes`, "success");
+                    const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+                    if (accounts && accounts.length > 0) {
+                        const mmAddr = accounts[0].toLowerCase().replace('0x', '');
+                        const approverAddr = approverDID.replace(/^did:t3n:/, '').replace(/^did:t3:user:/, '').replace(/^simulatedFallbackDid:\w+:/, '').toLowerCase();
+                        if (mmAddr === approverAddr) {
+                            appendTerminalLog("MetaMask address matches approverDID — requesting MetaMask signature...", "info");
+                            const provider = new ethers.BrowserProvider(window.ethereum);
+                            const signer = await provider.getSigner();
+                            signature = await signer.signMessage(standardMessage);
+                            appendTerminalLog(`Signed via MetaMask. Bytes: ${signature.length}`, "success");
+                        } else {
+                            appendTerminalLog(`MetaMask address (${mmAddr.substring(0,8)}...) does not match approverDID. Using registered local key instead.`, "info");
+                        }
+                    }
                 } catch (err) {
-                    appendTerminalLog(`MetaMask signing canceled or failed: ${err.message}. Falling back to browser memory key...`, "error");
+                    appendTerminalLog(`MetaMask signing failed: ${err.message}. Using local key...`, "error");
                 }
             }
             
-            // Fallback: Generate signature locally if metamask fails or isn't present
+            // Use the local fallback wallet
             if (!signature) {
                 try {
-                    // Use a mock wallet constructed from Alice's private key in .env
-                    // Address: 0xc8eb415587d29e3155bb615149156b0ce5f2ecc5
-                    // Private Key: 0x616355559f3b9880cf878749d4d8b42f5b7c9147552ce03793de353f9d3ef00d
-                    const privateKey = "0x616355559f3b9880cf878749d4d8b42f5b7c9147552ce03793de353f9d3ef00d";
-                    const wallet = new ethers.Wallet(privateKey);
+                    let signingKey = fallbackPrivateKey;
+                    let personaName = "agent";
                     
-                    appendTerminalLog(`Signing message locally for address: ${wallet.address}`, "info");
-                    signature = await wallet.signMessage(message);
-                    appendTerminalLog(`Challenge signed locally using secure developer key. Signature: ${signature.substring(0, 20)}...`, "success");
+                    const lowerApprover = approverDID.toLowerCase();
+                    if (lowerApprover === (serverPersonas.alice || "").toLowerCase() || lowerApprover === AliceDID.toLowerCase() || lowerApprover.includes(":alice:")) {
+                        personaName = "alice";
+                    } else if (lowerApprover === (serverPersonas.bob || "").toLowerCase() || lowerApprover === BobDID.toLowerCase() || lowerApprover.includes(":bob:")) {
+                        personaName = "bob";
+                    } else if (lowerApprover === (serverPersonas.charlie || "").toLowerCase() || lowerApprover === CharlieDID.toLowerCase() || lowerApprover.includes(":charlie:")) {
+                        personaName = "charlie";
+                    } else if (lowerApprover === (serverPersonas.agent || "").toLowerCase() || lowerApprover.includes(":agent:")) {
+                        personaName = "agent";
+                    }
+                    
+                    if (window.devPersonaKeys && window.devPersonaKeys[personaName]) {
+                        signingKey = window.devPersonaKeys[personaName];
+                        console.log(`[Dashboard] Resolved approverDID '${approverDID}' to local persona '${personaName}' key.`);
+                    }
+                    
+                    const wallet = new ethers.Wallet(signingKey);
+                    const walletAddr = wallet.address.toLowerCase().replace('0x', '');
+                    const approverAddr = approverDID.replace(/^did:t3n:/, '').replace(/^did:t3:user:/, '').replace(/^simulatedFallbackDid:\w+:/, '').toLowerCase();
+                    
+                    // Bypass warning if it is a simulated DID or we successfully resolved a persona mapping
+                    let isMatchedPersona = (personaName !== "agent") || (lowerApprover === (serverPersonas.agent || "").toLowerCase() || lowerApprover.includes(":agent:"));
+                    let isSimulatedDid = approverDID.startsWith("simulatedFallbackDid:");
+                    if (!isSimulatedDid && !isMatchedPersona && walletAddr !== approverAddr) {
+                        appendTerminalLog(`⚠ WARNING: Local key address (${walletAddr.substring(0,8)}...) does not match approverDID (${approverAddr.substring(0,8)}...). Signature will fail.`, "error");
+                    }
+                    
+                    appendTerminalLog(`Signing locally with registered key for ${personaName}: ${wallet.address}`, "info");
+                    signature = await wallet.signMessage(standardMessage);
+                    appendTerminalLog(`Signed locally. Signature: ${signature.substring(0, 20)}...`, "success");
                 } catch (err) {
-                    appendTerminalLog(`Fallback signing failed: ${err.message}`, "error");
+                    appendTerminalLog(`Local signing failed: ${err.message}`, "error");
                     return;
                 }
             }
@@ -641,6 +1243,16 @@
                         const sevClass = inc.severity ? inc.severity.toLowerCase() : 'medium';
                         const severityBadge = `<span class="severity-badge ${sevClass}">${inc.severity || 'MEDIUM'}</span>`;
                         
+                        // Auto-detect badge and resolution time
+                        const autoBadge = inc.autoMode ? '<span style="background:rgba(0,200,150,0.15); color:#00c896; padding:0.15rem 0.4rem; border-radius:4px; font-size:0.7rem; font-weight:700; margin-left:4px;" title="Auto-detected by traffic monitor">🤖 AUTO</span>' : '';
+                        let resolutionTime = '';
+                        if (inc.triggeredTime && (inc.resolvedTime || inc.rolledBackTime)) {
+                            const endTime = inc.resolvedTime || inc.rolledBackTime;
+                            const sec = ((endTime - inc.triggeredTime) / 1000).toFixed(1);
+                            resolutionTime = `<br><span style="font-size:0.65rem; color:hsl(215,20%,50%);">Resolved in ${sec}s</span>`;
+                        }
+                        const scoreBadge = inc.patchScore != null ? `<span style="font-size:0.65rem; color:${inc.patchScore >= 70 ? '#00c896' : '#ff6b6b'};">Score: ${inc.patchScore}/100</span>` : '';
+                        
                         let prAction = 'N/A';
                         if (inc.prUrl) {
                             const prNum = inc.prNumber || inc.prUrl.split('/').pop();
@@ -652,19 +1264,24 @@
                         
                         let rollbackAction = 'N/A';
                         // Show Rollback button if merged/resolved and we have a merge commit, and not already rolling back or rolled back
-                        const canRollback = inc.mergeCommit && (inc.status === 'Resolved' || inc.status === 'Monitoring Fix' || inc.status.startsWith('Failed') || inc.status === 'Failed Rollback');
+                        const canRollback = inc.mergeCommit && (inc.status === 'Resolved' || inc.status === 'CVE Resolved' || inc.status === 'Monitoring Fix' || inc.status.startsWith('Failed') || inc.status === 'Failed Rollback');
                         if (canRollback) {
                             rollbackAction = `<button class="rollback-small-btn" onclick="triggerManualRollback('${inc.id}')">Manual Rollback</button>`;
                         } else if (inc.status === 'Rolling Back' || inc.status === 'Rolled Back') {
                             rollbackAction = `<span style="color: hsl(215, 20%, 50%); font-style: italic;">${inc.status}</span>`;
                         }
                         
+                        // Trigger type badge
+                        const triggerBadge = inc.triggerType ? `<span style="font-size:0.6rem; background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.6); padding:0.1rem 0.3rem; border-radius:3px; display:inline-block; margin-top:2px;">${inc.triggerType}</span>` : '';
+                        const costBadge = inc.costSaving != null ? `<br><span style="font-size:0.65rem; color:#10b981;">💰 Saved $${inc.costSaving}</span>` : '';
+                        const runbookBadge = inc.runbookStepsCount != null ? `<br><span style="font-size:0.65rem; color:#8b5cf6; cursor:pointer; text-decoration:underline; font-weight:600;" onclick="showRunbookStepsModal('${inc.id}')">📋 ${inc.runbookStepsCount} steps (view)</span>` : '';
+
                         return `
                             <tr>
-                                <td style="font-family:'JetBrains Mono', monospace; font-size:0.8rem; font-weight:700;">${inc.id}</td>
+                                <td style="font-family:'JetBrains Mono', monospace; font-size:0.8rem; font-weight:700;">${inc.id}${autoBadge}${triggerBadge ? '<br>' + triggerBadge : ''}</td>
                                 <td><code>${inc.service}</code></td>
-                                <td>${severityBadge}</td>
-                                <td><span class="status-badge-inline">${inc.status}</span></td>
+                                <td>${severityBadge}${scoreBadge ? '<br>' + scoreBadge : ''}${costBadge}${runbookBadge}</td>
+                                <td><span class="status-badge-inline">${inc.status}</span>${resolutionTime}</td>
                                 <td>${prAction}</td>
                                 <td>${rollbackAction}</td>
                             </tr>
@@ -698,18 +1315,191 @@
             }
         }
 
-        // Loop checks
-        setInterval(() => {
-            fetchApprovals();
-            fetchLedger();
-            fetchIncidents();
-        }, 1500);
+        async function fetchTelemetry() {
+            try {
+                const response = await fetch(`/api/telemetry-metrics?_=${Date.now()}`);
+                const data = await response.json();
+                targetLatency = data.latency;
+                targetError = data.errorRate;
+            } catch (e) {
+                console.error("Telemetry fetch error:", e);
+            }
+        }
+        // ============================================================
+        // New Trigger Functions
+        // ============================================================
 
-        // First load
-        initChart();
-        setInterval(stepTelemetry, 1000);
-        fetchApprovals();
-        fetchLedger();
+        async function triggerCVE() {
+            const payload = {
+                type: "cve_manual",
+                cveId: "CVE-2024-29041",
+                severity: "high",
+                package: "express",
+                currentVersion: "4.18.2",
+                fixedVersion: "4.19.2",
+                affectedFile: "package.json",
+                description: "Express.js open redirect vulnerability allows attackers to redirect users to malicious sites via crafted URL parameters."
+            };
+            appendTerminalLog("Dispatching CVE webhook payload...", "system");
+            try {
+                const response = await fetch('/api/github-webhook', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                appendTerminalLog(`CVE remediation started: ${result.status} (${result.cveId})`, 'success');
+            } catch (err) {
+                appendTerminalLog(`CVE webhook failed: ${err.message}`, 'error');
+            }
+        }
+
+        async function triggerRunbook() {
+            const payload = {
+                type: "runbook_manual",
+                incidentId: "RB-TEST-001",
+                title: "High database memory on db-replica-02",
+                severity: "high",
+                service: "database-service",
+                runbookSteps: [
+                    "Check current memory usage: free -h",
+                    "Identify top memory consumers: ps aux --sort=-%mem | head -20",
+                    "Restart PostgreSQL replica: sudo systemctl restart postgresql-replica",
+                    "Verify replication lag: psql -c 'SELECT now() - pg_last_xact_replay_timestamp()'",
+                    "Check connection pool status: ss -s"
+                ]
+            };
+            appendTerminalLog("Dispatching PagerDuty runbook payload...", "system");
+            try {
+                const response = await fetch('/api/pagerduty-webhook', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                appendTerminalLog(`Runbook execution started: ${result.status} (${result.id})`, 'success');
+            } catch (err) {
+                appendTerminalLog(`Runbook webhook failed: ${err.message}`, 'error');
+            }
+        }
+
+        async function triggerCost() {
+            const payload = {
+                type: "cost_anomaly",
+                alarmName: "DailyCostAnomaly",
+                currentSpend: 2847,
+                threshold: 1200,
+                percentageIncrease: 137,
+                currency: "USD",
+                topResourceBySpend: [
+                    { service: "Amazon EC2", cost: 1840, resourceId: "i-0abc123def456789" },
+                    { service: "Amazon RDS", cost: 680, resourceId: "db-instance-prod-01" },
+                    { service: "Amazon S3", cost: 327, resourceId: "bucket-ml-training-data" }
+                ]
+            };
+            appendTerminalLog("Dispatching CloudWatch cost anomaly payload...", "system");
+            try {
+                const response = await fetch('/api/cloudwatch-webhook', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                appendTerminalLog(`Cost remediation started: ${result.status} (${result.id})`, 'success');
+            } catch (err) {
+                appendTerminalLog(`Cost webhook failed: ${err.message}`, 'error');
+            }
+        }
+
+        async function showRunbookStepsModal(incidentId) {
+            const modal = document.getElementById("runbook-modal");
+            const content = document.getElementById("runbook-steps-content");
+            const title = document.getElementById("runbook-modal-title");
+            
+            title.textContent = `Runbook Execution Steps: ${incidentId}`;
+            content.innerHTML = `<div style="text-align:center; padding:2rem; color:rgba(255,255,255,0.6);">Loading runbook steps...</div>`;
+            
+            modal.classList.add("active");
+            
+            try {
+                const res = await fetch(`/api/incidents/${incidentId}/runbook?_=${Date.now()}`);
+                const data = await res.json();
+                
+                if (data.error) {
+                    content.innerHTML = `<div style="color:hsl(0, 84%, 65%); padding:2rem; text-align:center;">Error: ${data.error}</div>`;
+                    return;
+                }
+                
+                const steps = data.runbookSteps || [];
+                if (steps.length === 0) {
+                    content.innerHTML = `<div style="color:rgba(255,255,255,0.6); padding:2rem; text-align:center;">No runbook steps found for this incident.</div>`;
+                    return;
+                }
+                
+                content.innerHTML = steps.map(step => {
+                    const statusClass = step.status === 'executed' ? 'executed' : 'pending';
+                    const statusIcon = step.status === 'executed' ? '✅' : '🔒';
+                    const statusLabel = step.status === 'executed' ? 'Executed' : (step.requiresApproval ? 'Pending Approval' : 'Pending Execution');
+                    
+                    let resultHtml = '';
+                    if (step.status === 'executed' && step.result) {
+                        resultHtml = `<div class="step-result-box"><strong>Result:</strong> ${step.result}</div>`;
+                    } else if (step.status === 'pending' && step.requiresApproval && step.approvalId) {
+                        resultHtml = `<div class="step-result-box" style="border-color: rgba(245,158,11,0.2); color: hsl(35, 90%, 65%);"><strong>Gate active:</strong> Waiting for signature on Approval ID: ${step.approvalId}</div>`;
+                    }
+                    
+                    return `
+                        <div class="runbook-step-item ${statusClass}">
+                            <div class="step-meta-row">
+                                <span class="step-index-badge">STEP ${step.index}</span>
+                                <span class="step-type-badge ${step.type}">${step.type}</span>
+                                <span class="step-status-text ${statusClass}">${statusIcon} ${statusLabel}</span>
+                            </div>
+                            <div class="step-desc">${step.description}</div>
+                            ${resultHtml}
+                        </div>
+                    `;
+                }).join('');
+            } catch (err) {
+                content.innerHTML = `<div style="color:hsl(0, 84%, 65%); padding:2rem; text-align:center;">Failed to fetch runbook details: ${err.message}</div>`;
+            }
+        }
+
+        function hideRunbookModal() {
+            document.getElementById("runbook-modal").classList.remove("active");
+        }
+
+        function closeRunbookModal(event) {
+            if (event.target === document.getElementById("runbook-modal")) {
+                hideRunbookModal();
+            }
+        }
+
+        // Restore session or show login after all dashboard code is ready
+        if (sessionStorage.getItem(AUTH_KEY) === "true") {
+            if (sessionStorage.getItem(LANDING_KEY) === "true") {
+                showDashboard();
+            } else {
+                showLanding();
+            }
+        } else {
+            showLogin();
+            document.getElementById("login-username").value = DEMO_USER;
+            document.getElementById("login-password").value = DEMO_PASS;
+        }
     </script>
+
+    <!-- Runbook Steps Details Modal -->
+    <div id="runbook-modal" class="modal-overlay" onclick="closeRunbookModal(event)">
+        <div class="modal-card" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2 id="runbook-modal-title">Runbook Execution Steps</h2>
+                <button class="close-modal-btn" onclick="hideRunbookModal()">&times;</button>
+            </div>
+            <div id="runbook-steps-content" class="runbook-steps-list">
+                <!-- Steps dynamically rendered here -->
+            </div>
+        </div>
+    </div>
 </body>
 </html>

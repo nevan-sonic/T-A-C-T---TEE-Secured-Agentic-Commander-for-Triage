@@ -1,0 +1,660 @@
+============================================================
+  T.A.C.T. — FRONTEND REDESIGN GUIDE
+  Read this first. Everything you need is here.
+============================================================
+
+Hi! Welcome to the T.A.C.T. project. This guide explains what
+the project does, what the current frontend looks like, and
+exactly how to rebuild it — without touching any backend code.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PART 1 — WHAT IS THIS PROJECT?
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+T.A.C.T. is an AI-powered incident response agent for software
+teams. Think of it like an automated on-call engineer that:
+
+  1. Watches your services for problems (error spikes, cost
+     explosions, security vulnerabilities, runbook triggers)
+
+  2. When something goes wrong, it automatically:
+       - Reads the error logs
+       - Asks an AI (Groq LLM) to diagnose the problem
+       - Writes a code fix
+       - Creates a GitHub Pull Request with the fix
+       - Asks a human to approve it (that's where YOU come in)
+       - Merges the PR and monitors the canary window
+
+  3. Every action the AI takes is recorded in an immutable
+     audit ledger (like a tamper-proof log) secured by
+     Terminal 3 (a blockchain-based trust network).
+
+THE 4 TYPES OF INCIDENTS the system handles:
+
+  A. SRE Incident  — service error rate spikes (e.g. database
+     pool exhaustion). The AI reads logs, writes a code patch,
+     creates a PR, waits for your signature to merge.
+
+  B. CVE / Security — a vulnerability is found in a dependency
+     (e.g. express has a critical bug). The AI auto-patches
+     the package version and gets human approval to merge.
+
+  C. Runbook — PagerDuty fires an alert. The system runs a
+     step-by-step runbook (like a checklist), some steps need
+     human approval before executing.
+
+  D. Cost Anomaly — AWS spend spikes unexpectedly. The AI
+     analyzes the top spending resources and rightsizes them
+     (requires human approval per action).
+
+THE HUMAN'S ROLE in the UI:
+
+  Humans do one thing: see a pending approval card and click
+  "Confirm & Sign". This cryptographically authorizes the AI
+  to proceed. Without the signature, the agent is stuck.
+
+That's the whole app. The dashboard shows:
+  - Live telemetry (latency + error rate chart)
+  - Active incidents and their status
+  - Pending approvals waiting for your signature
+  - The TEE audit ledger (immutable action log)
+  - Buttons to manually trigger demo incidents
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PART 2 — YOUR JOB
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+You are redesigning the frontend ONLY.
+
+  ✅ You touch:    public/index.html   (and any files you add
+                                        inside the public/ folder)
+
+  ❌ Don't touch:  server.js, src/, dist/, Cargo.toml,
+                   package.json, .env, or any other file.
+
+The backend is a Node.js server running on port 3000.
+It exposes a REST API. Your frontend calls that API.
+There is NO WebSocket — everything uses polling (setInterval).
+
+The current frontend is a single HTML file:
+  public/index.html
+
+You can replace its contents entirely with your own design.
+You can also create additional files inside public/:
+  public/style.css, public/app.js, public/images/, etc.
+The server will serve them automatically.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PART 3 — GETTING STARTED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Step 1: Clone and install
+  git clone https://github.com/nevan-sonic/T-A-C-T---TEE-Secured-Agentic-Commander-for-Triage.git
+  cd T-A-C-T---TEE-Secured-Agentic-Commander-for-Triage
+  npm install
+  npm run compile
+
+Step 2: Copy the env file and fill in your keys
+  cp .env.example .env
+  (open .env and fill in GROQ_API_KEY and GITHUB_TOKEN at minimum
+   — see REQUIREMENTS.txt for full details)
+
+Step 3: Start the server
+  node server.js
+
+Step 4: Open the browser
+  http://localhost:3000
+
+Step 5: Edit public/index.html and hard-refresh (Ctrl+Shift+R)
+
+That's it. The server serves your HTML file. You see changes
+immediately on refresh.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PART 4 — ONE REQUIRED THING: THE SIGNING WALLET
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+This is the only tricky part. Read it carefully.
+
+WHAT IS A DID?
+  DID stands for "Decentralised Identifier". In this project
+  it's just an Ethereum wallet address formatted like:
+    did:t3n:1dc692077cbf6d404b619c8d9b6648849c74802c
+
+  Every approval the AI creates is assigned to a specific DID.
+  To approve it, the browser must sign a message with the
+  private key that matches that DID. If the key doesn't match,
+  you get "Invalid signature proof".
+
+HOW IT WORKS:
+  - The server has a configured wallet (set in .env via T3N_API_KEY).
+  - When an incident needs approval, the server routes it to
+    that wallet's DID.
+  - Your browser must use the same private key to sign.
+  - The backend exposes GET /api/dev-wallet to share the key
+    with the browser (this is fine for local dev only).
+
+WHAT YOU MUST DO ON PAGE LOAD (copy this code exactly):
+
+  <!-- Load ethers.js v6 from CDN — required for wallet signing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+
+  <script>
+    // ── STEP 1: Sync the signing key from the server (SYNCHRONOUS — must block) ──
+    // We use old-school XMLHttpRequest (not fetch) because it can be synchronous.
+    // This ensures signingWallet is ready before anything else runs.
+    let signingKey = localStorage.getItem("t3_developer_private_key");
+    try {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", "/api/dev-wallet", false); // 'false' = synchronous/blocking
+        xhr.send();
+        if (xhr.status === 200) {
+            const data = JSON.parse(xhr.responseText);
+            if (data.privateKey && data.privateKey.length === 66) {
+                signingKey = data.privateKey;
+                localStorage.setItem("t3_developer_private_key", signingKey);
+            }
+        }
+    } catch (e) { console.warn("dev-wallet sync failed:", e.message); }
+
+    // If server has no key, generate a random one (fallback)
+    if (!signingKey || signingKey.length !== 66) {
+        signingKey = ethers.Wallet.createRandom().privateKey;
+        localStorage.setItem("t3_developer_private_key", signingKey);
+    }
+
+    // ── STEP 2: Create the wallet and DID ──
+    const signingWallet = new ethers.Wallet(signingKey);
+    const myDID = "did:t3n:" + signingWallet.address.toLowerCase().replace("0x", "");
+
+    // ── STEP 3: Tell the server about this browser session ──
+    fetch("/api/register-active-did", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ did: myDID })
+    });
+
+    console.log("Signed in as:", myDID);
+  </script>
+
+You need signingWallet available everywhere for the approve
+function (see PART 5 → Endpoint 6).
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PART 5 — ALL API ENDPOINTS (with plain-English explanations)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+All endpoints are on http://localhost:3000/api/
+All responses are JSON.
+
+─────────────────────────────────────────────────────────────
+ENDPOINT 1 — GET /api/telemetry-metrics
+─────────────────────────────────────────────────────────────
+What it does:
+  Returns the real-time health of the simulated target service.
+  Use this to power a live latency/error rate chart.
+  The backend updates this every 500ms automatically.
+
+When to call it:
+  Poll every 500ms with setInterval.
+
+Response example:
+  { "latency": 86, "errorRate": 12 }
+
+  latency   = average response time in milliseconds
+  errorRate = percentage of requests that failed (0–100)
+
+When errorRate >= 45% for a few seconds, the backend
+automatically creates a new incident. This is what makes
+the demo "self-driving" — you can watch it trigger itself.
+
+─────────────────────────────────────────────────────────────
+ENDPOINT 2 — GET /api/incidents
+─────────────────────────────────────────────────────────────
+What it does:
+  Returns the list of all incidents — past and present.
+  This is the main data source for your incident cards/table.
+
+When to call it:
+  Poll every 2000ms (2 seconds).
+
+Response example:
+  [
+    {
+      "id":            "INC-2026-0847",
+      "service":       "api-gateway",
+      "severity":      "MEDIUM",          // "HIGH", "MEDIUM", or "LOW"
+      "status":        "Awaiting Approval",
+      "triggerType":   "auto",
+      "errorRate":     78,                // e.g. 78% requests failed
+      "p99Latency":    12000,             // e.g. 12 seconds response time
+      "rootCause":     "Connection pool exhausted due to traffic spike",
+      "patch":         "const pool = { max: 50, ... }",
+      "prUrl":         "https://github.com/.../pull/42",
+      "prNumber":      42,
+      "branch":        "fix/db-pool-exhaustion-xxxx",
+      "mergeCommit":   "f572c3b...",      // null until merged
+      "revertCommit":  null,              // null unless rolled back
+      "autoMode":      false,
+      "patchScore":    75,                // AI confidence 0–100
+      "patchConfidence": "MEDIUM",
+      "runbookStepsCount": null,          // number if runbook, else null
+      "costSaving":    null,              // e.g. "300150" if cost anomaly
+      "triggeredTime": 1718960000000,     // when incident started (epoch ms)
+      "logsReadTime":  1718960002000,     // when AI read the logs
+      "prCreatedTime": 1718960010000,     // when PR was opened
+      "mergedTime":    1718960050000,     // when PR was merged
+      "resolvedTime":  1718960100000,     // when fully resolved
+      "rolledBackTime": null
+    }
+  ]
+
+STATUS values and what they mean:
+  "Analyzing"                  → AI is reading logs
+  "Reading Logs"               → AI is fetching error logs
+  "Classifying Severity"       → AI is deciding severity
+  "Creating PR"                → AI is writing the fix and opening PR
+  "Awaiting Approval"          → waiting for human signature ← show a notification
+  "Merging"                    → PR is being merged
+  "Canary Monitoring"          → watching the service post-merge
+  "Resolved"                   → fixed successfully
+  "CVE Resolved"               → CVE patched successfully
+  "Runbook Completed"          → all runbook steps done
+  "Cost Anomaly Resolved"      → cost issue remediated
+  "Rolling Back"               → merge is being reverted
+  "Rolled Back"                → successfully reverted
+  "Failed: ..."                → something went wrong
+
+TRIGGER TYPE values (for icons):
+  "auto"         → detected automatically by the error monitor
+  "manual"       → triggered via the demo button
+  "github-cve"   → came from a GitHub/Dependabot security alert
+  "pagerduty"    → came from PagerDuty/Opsgenie
+  "cloudwatch"   → came from AWS CloudWatch/Cost Anomaly
+  "datadog"      → came from a Datadog webhook
+  "prometheus"   → came from a Prometheus alert
+
+─────────────────────────────────────────────────────────────
+ENDPOINT 3 — GET /api/approvals
+─────────────────────────────────────────────────────────────
+What it does:
+  Returns approvals that are currently waiting for a human
+  signature. When this list is non-empty, show a notification
+  or badge so the user knows action is needed.
+
+When to call it:
+  Poll every 1500ms (1.5 seconds).
+
+Response example:
+  [
+    {
+      "id":          "app_dc77h8",
+      "approverDID": "did:t3n:1dc692077cbf6d404b619c8d9b6648849c74802c",
+      "scope":       "repo:merge",
+      "status":      "pending",
+      "metadata": {
+        "incidentId": "INC-2026-0847"
+      }
+    }
+  ]
+
+  id          = the approval's unique ID — you'll need this to sign
+  approverDID = the wallet DID that must sign (should match myDID)
+  scope       = what exactly is being approved:
+                  "repo:merge"            → merging a fix PR
+                  "repo:revert"           → rolling back a merge
+                  "aws:rightsize"         → rightsizing a cloud resource
+                  "runbook:execute:step-N"→ executing runbook step N
+
+─────────────────────────────────────────────────────────────
+ENDPOINT 4 — POST /api/approve   ← THE MOST IMPORTANT ONE
+─────────────────────────────────────────────────────────────
+What it does:
+  Signs and submits an approval. This is what happens when
+  the user clicks "Confirm & Sign".
+
+How to implement the approve button:
+
+  async function signAndApprove(approvalId) {
+      // This message format MUST match exactly — do not change it
+      const message = [
+          "T3 Agent Authorization Grant",
+          "Agent DID: did:t3:agent:department-of-incidents",
+          "Contract: z:system:incident-contracts",
+          `Function: incident-${approvalId}`,
+          `Approval ID: ${approvalId}`
+      ].join("\n");
+
+      // Sign the message with the wallet synced in PART 4
+      const signature = await signingWallet.signMessage(message);
+
+      // Send to backend
+      const response = await fetch("/api/approve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: approvalId, signature: signature })
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+          console.log("Approved! The AI will now proceed.");
+          // refresh your approvals list and incident list
+      } else {
+          console.error("Approval failed:", result.error);
+          // Show an error to the user
+      }
+  }
+
+Success response:  { "status": "approved" }
+Failure response:  { "error": "Invalid signature proof. Address recovery failed." }
+
+If you see the failure error, it means the wallet key in the
+browser doesn't match the server's configured approver key.
+The signing setup in PART 4 prevents this — make sure you
+copied that code correctly.
+
+─────────────────────────────────────────────────────────────
+ENDPOINT 5 — GET /api/ledger
+─────────────────────────────────────────────────────────────
+What it does:
+  Returns the immutable audit log of every action the AI took.
+  Think of it as a blockchain-style activity feed — it grows
+  over time and can never be edited.
+
+When to call it:
+  Poll every 3000ms (3 seconds).
+
+Response example:
+  [
+    {
+      "action":    "CVE_DETECTED",
+      "actor":     "did:t3n:1dc692...",
+      "timestamp": 1718960000000
+    },
+    {
+      "action":    "LLM_INVOKED_IN_TEE",
+      "actor":     "did:t3n:1dc692...",
+      "timestamp": 1718960001000
+    },
+    {
+      "action":    "PATCH_VALIDATED",
+      "actor":     "did:t3:agent:department-of-incidents",
+      "timestamp": 1718960002000,
+      "score":     75
+    },
+    {
+      "action":    "APPROVAL_GRANTED",
+      "actor":     "did:t3n:1dc692...",
+      "timestamp": 1718960050000
+    },
+    {
+      "action":    "MERGE_EXECUTED",
+      "actor":     "did:t3n:1dc692...",
+      "timestamp": 1718960052000,
+      "prUrl":     "https://github.com/.../pull/42",
+      "mergeCommit": "f572c3bc..."
+    }
+  ]
+
+All timestamps are epoch milliseconds. Convert to readable time:
+  new Date(timestamp).toLocaleTimeString()
+
+─────────────────────────────────────────────────────────────
+ENDPOINT 6 — GET /api/incidents/:id/runbook
+─────────────────────────────────────────────────────────────
+What it does:
+  For runbook-type incidents, returns the step-by-step checklist
+  the AI is executing. Use this to show a progress list.
+
+Example call:
+  GET /api/incidents/RB-TEST-001/runbook
+
+Response example:
+  {
+    "incidentId":   "RB-TEST-001",
+    "status":       "Runbook Completed",
+    "triggerType":  "pagerduty",
+    "runbookSteps": [
+      {
+        "step":             1,
+        "type":             "diagnostic",
+        "description":      "Check memory: free -h",
+        "status":           "completed",
+        "requiresApproval": false
+      },
+      {
+        "step":             3,
+        "type":             "remediation",
+        "description":      "Restart replica: systemctl restart postgres",
+        "status":           "pending_approval",
+        "requiresApproval": true
+      }
+    ]
+  }
+
+  step type values: "diagnostic" | "remediation" | "verification"
+  step status:      "completed" | "pending_approval" | "skipped"
+
+─────────────────────────────────────────────────────────────
+ENDPOINT 7 — POST /api/incidents/:id/rollback
+─────────────────────────────────────────────────────────────
+What it does:
+  Reverts a merged fix if it caused problems. Show a "Rollback"
+  button on incidents that have been merged (mergeCommit is set).
+
+Example call:
+  POST /api/incidents/INC-2026-0847/rollback
+  (no request body needed)
+
+Response:
+  { "status": "rollback_initiated", "id": "INC-2026-0847" }
+
+After this, the incident status changes to "Rolling Back"
+and then "Rolled Back". The rollback itself also requires a
+signature approval — you'll see a new item in /api/approvals.
+
+─────────────────────────────────────────────────────────────
+ENDPOINT 8 — POST /api/stress  (demo trigger)
+─────────────────────────────────────────────────────────────
+What it does:
+  Instantly simulates a traffic spike that overwhelms the
+  service. Within 4 seconds, the system auto-detects it and
+  creates a new incident. Use this as a "Break It" demo button.
+
+Request body:
+  { "connections": 25, "holdMs": 3000 }
+
+  connections = how many fake connections to open (max 50)
+  holdMs      = how long to hold them open (milliseconds)
+
+Response:
+  { "message": "Simulating 25 concurrent connections for 3000ms", "activeConnections": 25 }
+
+─────────────────────────────────────────────────────────────
+ENDPOINT 9 — POST /api/github-webhook  (demo trigger: CVE)
+─────────────────────────────────────────────────────────────
+What it does:
+  Simulates a GitHub Dependabot / security alert.
+  Triggers the CVE auto-patch pipeline.
+
+Request body (copy-paste this for your demo button):
+  {
+    "type":           "cve_manual",
+    "cveId":          "CVE-2024-29041",
+    "severity":       "medium",
+    "package":        "express",
+    "currentVersion": "4.18.2",
+    "fixedVersion":   "4.19.2",
+    "affectedFile":   "app_service.js",
+    "description":    "Open redirect vulnerability in express"
+  }
+
+Response:
+  { "status": "cve_remediation_started", "id": "CVE-CVE-2024-29041", "cveId": "CVE-2024-29041" }
+
+─────────────────────────────────────────────────────────────
+ENDPOINT 10 — POST /api/pagerduty-webhook  (demo trigger: Runbook)
+─────────────────────────────────────────────────────────────
+What it does:
+  Simulates a PagerDuty / Opsgenie alert with a runbook.
+  Triggers step-by-step runbook execution.
+
+Request body:
+  {
+    "type":        "runbook_manual",
+    "incidentId":  "RB-DEMO-001",
+    "title":       "High database memory on db-replica-02",
+    "severity":    "high",
+    "service":     "database",
+    "runbookSteps": [
+      { "step": 1, "type": "diagnostic",   "description": "Check memory: free -h",                             "requiresApproval": false },
+      { "step": 2, "type": "remediation",  "description": "Flush caches: sync; echo 3 > /proc/sys/vm/drop_caches", "requiresApproval": false },
+      { "step": 3, "type": "remediation",  "description": "Restart replica: systemctl restart postgres",        "requiresApproval": true },
+      { "step": 4, "type": "verification", "description": "Verify replication lag",                             "requiresApproval": false },
+      { "step": 5, "type": "diagnostic",   "description": "Check connection pool status: ss -s",                "requiresApproval": false }
+    ]
+  }
+
+Response:
+  { "status": "runbook_execution_started", "id": "RB-DEMO-001" }
+
+─────────────────────────────────────────────────────────────
+ENDPOINT 11 — POST /api/cloudwatch-webhook  (demo trigger: Cost)
+─────────────────────────────────────────────────────────────
+What it does:
+  Simulates an AWS cost anomaly. Triggers AI cost analysis
+  and rightsizing recommendations (with approval per action).
+
+Request body:
+  {
+    "type":               "cost_anomaly",
+    "alarmName":          "DailyCostAnomaly",
+    "currentSpend":       2847,
+    "threshold":          1200,
+    "percentageIncrease": 137,
+    "currency":           "USD",
+    "topResourceBySpend": [
+      { "service": "Amazon EC2", "cost": 921, "resourceId": "i-0abc123def456789" },
+      { "service": "Amazon RDS", "cost": 255, "resourceId": "db-instance-prod-01" },
+      { "service": "Amazon S3",  "cost": 50,  "resourceId": "bucket-ml-training-data" }
+    ]
+  }
+
+Response:
+  { "status": "cost_remediation_started", "id": "COST-XXXX" }
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PART 6 — WHAT TO BUILD (UI SECTIONS)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Your UI should have these sections. You can arrange/style
+them however you like.
+
+  1. HEADER / NAVBAR
+     - Project name, logo
+     - Connected wallet indicator (show the first 6 + last 4
+       chars of signingWallet.address)
+
+  2. LIVE TELEMETRY CHART
+     - Polls GET /api/telemetry-metrics every 500ms
+     - Shows a live line chart of latency (ms) and error rate (%)
+     - When error rate is high, the chart should look alarming
+
+  3. DEMO TRIGGER BUTTONS (for demos)
+     - "Trigger SRE Incident" → POST /api/stress
+     - "Trigger CVE"         → POST /api/github-webhook
+     - "Trigger Runbook"     → POST /api/pagerduty-webhook
+     - "Trigger Cost Anomaly"→ POST /api/cloudwatch-webhook
+
+  4. PENDING APPROVALS PANEL (most important UX!)
+     - Polls GET /api/approvals every 1500ms
+     - Each approval is a card showing:
+         Incident ID, scope (what is being approved), approver DID
+     - Big "Confirm & Sign" button that calls signAndApprove(id)
+     - Show a badge/notification when there are pending approvals
+
+  5. INCIDENT LIST / CARDS
+     - Polls GET /api/incidents every 2000ms
+     - One card per incident showing:
+         ID, service name, severity badge (HIGH/MEDIUM/LOW)
+         status badge (color-coded), trigger type icon
+         root cause (when available)
+         PR link (when available)
+         timestamps (triggered, resolved, etc.)
+     - For runbook incidents: show a "View Steps" button
+       → loads GET /api/incidents/:id/runbook
+     - For merged incidents: show a "Rollback" button
+       → calls POST /api/incidents/:id/rollback
+     - For cost incidents: show costSaving formatted as "$X,XXX"
+
+  6. TEE AUDIT LEDGER
+     - Polls GET /api/ledger every 3000ms
+     - Show as a live scrolling feed / timeline
+     - Each entry: action name, actor (short DID), timestamp
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PART 7 — QUICK REFERENCE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Polling intervals:
+  /api/telemetry-metrics   → every 500ms
+  /api/approvals           → every 1500ms
+  /api/incidents           → every 2000ms
+  /api/ledger              → every 3000ms
+
+Timestamp formatting:
+  new Date(timestamp).toLocaleTimeString()   // "2:42:30 PM"
+  new Date(timestamp).toLocaleDateString()   // "6/21/2026"
+
+Cost saving formatting:
+  "$" + parseInt(costSaving).toLocaleString()  // "$300,150"
+
+Severity colours (suggestion):
+  HIGH   → red   (#ef4444)
+  MEDIUM → amber (#f59e0b)
+  LOW    → green (#22c55e)
+
+Status colours (suggestion):
+  Resolved / *Resolved / Completed → green
+  Awaiting Approval               → amber / pulsing
+  Analyzing / Creating PR / *ing  → blue (in-progress)
+  Rolled Back                     → purple
+  Failed: *                       → red
+
+Ethers.js v6 CDN:
+  https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js
+
+Key rule: use ethers.js v6 (NOT v5 — the API is different).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PART 8 — COMMON MISTAKES TO AVOID
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❌ Using fetch() instead of XMLHttpRequest for /api/dev-wallet
+   → fetch is async so the wallet won't be ready on time.
+   → Always use the synchronous XMLHttpRequest shown in PART 4.
+
+❌ Changing the approval message format in signAndApprove()
+   → The server verifies the exact message text.
+   → Copy it exactly as shown in PART 5 Endpoint 4.
+
+❌ Loading ethers.js v5 instead of v6
+   → The CDN link in PART 7 is v6. Use that one.
+
+❌ Forgetting to hard-refresh (Ctrl+Shift+R)
+   → The server sets no-cache headers but browser tabs can
+     still cache. Hard-refresh to always see your latest code.
+
+❌ Editing any file outside public/
+   → You'll break the backend. Stay in public/ only.
+
+============================================================
+  Good luck! Ask if anything is unclear.
+============================================================

@@ -1,5 +1,5 @@
-import { T3Session, ApprovalResult } from "../sdk-wrapper/t3-agent";
-import { agent } from "./agent-core";
+import { T3Session, ApprovalResult, requestDelegation, activeIncidents } from "./agent-core";
+import { writeAudit } from "./audit";
 
 export async function requestApprovals(
     session: T3Session,
@@ -8,12 +8,15 @@ export async function requestApprovals(
 ): Promise<ApprovalResult[]> {
     console.log(`[Incident Guard] Routing approvals for incident ${incidentId} to: ${JSON.stringify(approverDIDs)}`);
     
+    const incident = activeIncidents.get(incidentId);
+    const severity = incident ? incident.severity : "MEDIUM";
+
     const approvalPromises = approverDIDs.map(did =>
-        agent.requestDelegation({
+        requestDelegation({
             session,
             delegateDID: did,
             scope: "repo:merge",
-            metadata: { incidentId, requestedAt: Date.now() },
+            metadata: { incidentId, requestedAt: Date.now(), severity },
             // Blocks until engineer approves in UI
             timeoutMs: 30 * 60 * 1000,
         })
@@ -24,7 +27,7 @@ export async function requestApprovals(
     
     // Log each approval to audit ledger
     for (const result of results) {
-        await agent.audit.write({
+        await writeAudit({
             action: "APPROVAL_GRANTED",
             actor: result.approverDID,
             incidentId,

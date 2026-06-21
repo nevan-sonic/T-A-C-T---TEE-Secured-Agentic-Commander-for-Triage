@@ -1,1 +1,6 @@
-Increase pool_size to 50 and configure idle_timeout to 30000, also consider implementing connection validation and efficient memory management strategies
+{
+  "service_name": "api-gateway",
+  "db_host": "localhost",
+  "db_port": 5432,
+  "pool_size": 20
+}

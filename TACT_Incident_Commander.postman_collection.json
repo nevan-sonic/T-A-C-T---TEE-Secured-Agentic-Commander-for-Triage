@@ -1,0 +1,275 @@
+{
+	"info": {
+		"_postman_id": "84c8a2de-8e9a-4c28-977c-bc7d853e5f2e",
+		"name": "TACT Incident Commander",
+		"description": "Postman collection for T.A.C.T. (TEE-Secured Agentic Commander for Triage) REST API and webhook simulation. Used for triggering alerts, managing incident lifecycles, and validating blockchain ledger entries.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Telemetry & Metrics",
+			"item": [
+				{
+					"name": "Get Telemetry Metrics",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:3000/api/telemetry-metrics",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"api",
+								"telemetry-metrics"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Mock Service Endpoint",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:3000/api/service",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"api",
+								"service"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Incident Triggers",
+			"item": [
+				{
+					"name": "Trigger DB Pool Stress Test",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"connections\": 35,\n  \"holdMs\": 5000\n}"
+						},
+						"url": {
+							"raw": "http://localhost:3000/api/stress",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"api",
+								"stress"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Trigger CVE Webhook",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"type\": \"cve_manual\",\n  \"cveId\": \"CVE-2024-29041\",\n  \"severity\": \"high\",\n  \"package\": \"express\",\n  \"currentVersion\": \"4.18.2\",\n  \"fixedVersion\": \"4.19.2\",\n  \"affectedFile\": \"package.json\",\n  \"description\": \"Express.js open redirect vulnerability allows attackers to redirect users to malicious sites via crafted URL parameters.\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:3000/api/github-webhook",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"api",
+								"github-webhook"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Trigger PagerDuty Runbook Webhook",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"type\": \"runbook_manual\",\n  \"incidentId\": \"RB-TEST-001\",\n  \"title\": \"High database memory on db-replica-02\",\n  \"severity\": \"high\",\n  \"service\": \"database-service\",\n  \"runbookSteps\": [\n    \"Check current memory usage: free -h\",\n    \"Identify top memory consumers: ps aux --sort=-%mem | head -20\",\n    \"Restart PostgreSQL replica: sudo systemctl restart postgresql-replica\",\n    \"Verify replication lag: psql -c 'SELECT now() - pg_last_xact_replay_timestamp()'\",\n    \"Check connection pool status: ss -s\"\n  ]\n}"
+						},
+						"url": {
+							"raw": "http://localhost:3000/api/pagerduty-webhook",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"api",
+								"pagerduty-webhook"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Trigger CloudWatch Cost Anomaly Webhook",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"type\": \"cost_anomaly\",\n  \"alarmName\": \"DailyCostAnomaly\",\n  \"currentSpend\": 2847,\n  \"threshold\": 1200,\n  \"percentageIncrease\": 137,\n  \"currency\": \"USD\",\n  \"topResourceBySpend\": [\n    { \"service\": \"Amazon EC2\", \"cost\": 1840, \"resourceId\": \"i-0abc123def456789\" },\n    { \"service\": \"Amazon RDS\", \"cost\": 680, \"resourceId\": \"db-instance-prod-01\" },\n    { \"service\": \"Amazon S3\", \"cost\": 327, \"resourceId\": \"bucket-ml-training-data\" }\n  ]\n}"
+						},
+						"url": {
+							"raw": "http://localhost:3000/api/cloudwatch-webhook",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"api",
+								"cloudwatch-webhook"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Control Plane Data",
+			"item": [
+				{
+					"name": "List Active Incidents",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:3000/api/incidents",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"api",
+								"incidents"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Immutable Ledger Logs",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:3000/api/ledger",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"api",
+								"ledger"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Pending Approvals",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:3000/api/approvals",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"api",
+								"approvals"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Submit Approval Signature",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"app_xxxxxx\",\n  \"signature\": \"0x...\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:3000/api/approve",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"api",
+								"approve"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}

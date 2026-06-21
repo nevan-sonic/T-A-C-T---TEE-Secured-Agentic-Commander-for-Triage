@@ -1,0 +1,59 @@
+package host:interfaces@2.1.0;
+
+interface logging {
+    info: func(msg: string);
+    warn: func(msg: string);
+    error: func(msg: string);
+}
+
+interface kv-store {
+    get: func(map: string, key: list<u8>) -> result<option<list<u8>>, string>;
+    put: func(map: string, key: list<u8>, value: list<u8>) -> result<_, string>;
+    delete: func(map: string, key: list<u8>) -> result<_, string>;
+}
+
+interface http {
+    enum verb {
+        get,
+        post,
+        put,
+        delete,
+        head,
+        patch,
+        options
+    }
+    record request {
+        method: verb,
+        url: string,
+        headers: option<list<tuple<string, string>>>,
+        payload: option<list<u8>>,
+    }
+    record response {
+        code: u16,
+        headers: list<tuple<string, string>>,
+        payload: list<u8>,
+    }
+    call: func(req: request) -> result<response, string>;
+}
+
+interface http-with-placeholders {
+    variant http-error {
+        egress-denied(string),
+        placeholder-denied(string),
+        placeholder-unknown(string),
+        placeholder-no-user-context,
+        upstream-error(string),
+    }
+    record request {
+        method: string,
+        url: string,
+        headers: option<list<tuple<string, string>>>,
+        body: option<list<u8>>,
+    }
+    record response {
+        code: u16,
+        headers: list<tuple<string, string>>,
+        body: list<u8>,
+    }
+    call: func(req: request) -> result<response, http-error>;
+}
