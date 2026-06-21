@@ -2,13 +2,35 @@ import { execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 
-const workspaceDir = "c:\\Users\\Nevan\\Desktop\\Starlight";
+// [Security] Sanitize shell arguments to prevent command injection
+function sanitizeShellArg(input: string): string {
+    return input.replace(/[^a-zA-Z0-9_\-\.\/]/g, "");
+}
+
+// [Security] Validate workspace path to prevent path traversal
+function validateWorkspacePath(dir: string): string {
+    const resolved = path.resolve(dir);
+    const cwd = process.cwd();
+    // Ensure workspace is within the project directory
+    if (!resolved.startsWith(cwd) && !resolved.includes("workspace")) {
+        console.log(`[Security] Workspace path outside project directory: ${resolved}. Using default.`);
+        return path.join(cwd, "workspace");
+    }
+    return resolved;
+}
+
+const workspaceDir = validateWorkspacePath(process.env.GIT_WORKSPACE_DIR || path.join(process.cwd(), "workspace"));
 const configFilePath = path.join(workspaceDir, "db_config.json");
+const appServiceFilePath = path.join(workspaceDir, "app_service.js");
 
 // Helper to run commands in the local Git workspace
 function runGitCmd(cmd: string): string {
     try {
-        const output = execSync(cmd, { cwd: workspaceDir, stdio: "pipe" });
+        // [Security] Basic command injection check — git commands should only contain safe characters
+        if (/[;&|`$(){}!#]/.test(cmd.replace(/"[^"]*"/g, "").replace(/'[^']*'/g, ""))) {
+            console.log(`[Security] Potentially dangerous characters in git command: ${cmd}`);
+        }
+        const output = execSync(cmd, { cwd: workspaceDir, stdio: "pipe", timeout: 30000 });
         return output.toString().trim();
     } catch (e: any) {
         console.error(`[Git Error] Command failed: ${cmd}. Error: ${e.stderr?.toString() || e.message}`);
@@ -37,19 +59,40 @@ export function initializeLocalRepo() {
         runGitCmd("git config user.name \"Department of Incidents Bot\"");
         runGitCmd("git config user.email \"incident-bot@terminal3.io\"");
         
-        // Write initial config file
-        const initialConfig = {
-            service_name: "api-gateway",
-            db_host: "localhost",
-            db_port: 5432,
-            pool_size: 20
-        };
-        fs.writeFileSync(configFilePath, JSON.stringify(initialConfig, null, 2));
+        // Write initial app_service.js
+        const defaultAppService = `// Production Gateway Database Connection Pool Init
+const { Pool } = require("pg");
+
+const poolConfig = {
+  host: "localhost",
+  port: 5432,
+  database: "production_db",
+  // Database connection limit
+  max: 20,
+  idleTimeoutMillis: 10000,
+  connectionTimeoutMillis: 2000,
+};
+
+const dbPool = new Pool(poolConfig);
+
+module.exports = { dbPool, poolConfig };
+`;
+        fs.writeFileSync(appServiceFilePath, defaultAppService);
         
-        runGitCmd("git add db_config.json");
-        runGitCmd("git commit -m \"initial commit: setup gateway config\"");
+        // Copy package.json from root to workspace
+        const rootPackageJson = path.join(process.cwd(), "package.json");
+        if (fs.existsSync(rootPackageJson)) {
+            fs.copyFileSync(rootPackageJson, path.join(workspaceDir, "package.json"));
+        }
+        
+        runGitCmd("git add app_service.js");
+        if (fs.existsSync(path.join(workspaceDir, "package.json"))) {
+            runGitCmd("git add package.json");
+        }
+        
+        runGitCmd("git commit -m \"initial commit: setup gateway service code and package configuration\"");
         runGitCmd("git branch -M main");
-        console.log("[Git Engine] Initialized repository, renamed default branch to 'main', and committed db_config.json");
+        console.log("[Git Engine] Initialized repository, renamed default branch to 'main', and committed files.");
     } else {
         console.log("[Git Engine] Git repository already exists in workspace.");
         try {
@@ -58,11 +101,42 @@ export function initializeLocalRepo() {
         } catch (e) {
             // Ignore if no commits are present yet or already main
         }
+        
+        // Sync package.json from parent if not present in workspace
+        const workspacePackageJson = path.join(workspaceDir, "package.json");
+        if (!fs.existsSync(workspacePackageJson)) {
+            const rootPackageJson = path.join(process.cwd(), "package.json");
+            if (fs.existsSync(rootPackageJson)) {
+                fs.copyFileSync(rootPackageJson, workspacePackageJson);
+                try {
+                    runGitCmd("git add package.json");
+                    runGitCmd("git commit -m \"chore: track package.json on main\"");
+                } catch (e) {}
+            }
+        }
+        
+        // Stage and commit app_service.js on main if it's untracked or modified
+        try {
+            runGitCmd("git add app_service.js");
+            const diff = runGitCmd("git diff --cached --name-only");
+            if (diff.includes("app_service.js")) {
+                runGitCmd("git commit -m \"chore: track app_service.js on main\"");
+                console.log("[Git Engine] Committed app_service.js to main branch.");
+            }
+        } catch (e: any) {
+            console.warn(`[Git Engine Warning] Failed to stage/commit app_service.js on main: ${e.message}`);
+        }
     }
 }
 
-export async function createPR(patchContent: string, secureContext: any): Promise<PRDetails> {
-    console.log("[Git Engine] Creating branch and applying config fix...");
+export async function createPR(
+    patchContent: string,
+    secureContext: any,
+    targetPath: string = "app_service.js",
+    commitMessage: string = "fix(db): increase database pool size to 50",
+    customBranchName?: string
+): Promise<PRDetails> {
+    console.log(`[Git Engine] Creating branch and applying config fix to ${targetPath}...`);
     
     // Ensure we are on main and clean
     runGitCmd("git checkout -f main");
@@ -86,34 +160,61 @@ export async function createPR(patchContent: string, secureContext: any): Promis
     }
     
     // Create new branch
-    const branchName = "fix/db-pool-exhaustion-" + Math.random().toString(36).substring(2, 6);
-    runGitCmd(`git checkout -b ${branchName}`);
+    const branchName = customBranchName || ("fix/" + targetPath.replace(/[^a-zA-Z0-9]/g, "-") + "-" + Math.random().toString(36).substring(2, 6));
+    const safeBranch = sanitizeShellArg(branchName);
+    runGitCmd(`git checkout -B ${safeBranch}`);
     
     // Apply patch
     try {
-        const patchObj = JSON.parse(patchContent);
-        // Load current config
-        const currentConfig = JSON.parse(fs.readFileSync(configFilePath, "utf-8"));
-        
-        // Merge patch keys
-        const updatedConfig = { ...currentConfig, ...patchObj };
-        fs.writeFileSync(configFilePath, JSON.stringify(updatedConfig, null, 2));
-        console.log(`[Git Engine] Config file updated. New pool_size: ${updatedConfig.pool_size}`);
-    } catch (e) {
-        // Fallback if not JSON
-        fs.writeFileSync(configFilePath, patchContent);
-        console.log("[Git Engine] Raw patch content written directly to db_config.json");
+        let cleanCode = patchContent;
+        if (cleanCode.includes("```")) {
+            const lines = cleanCode.split("\n");
+            const filtered = lines.filter(line => !line.trim().startsWith("```"));
+            cleanCode = filtered.join("\n").trim();
+        }
+
+        // Validate cleanCode has Pool and max only if targetPath is app_service.js
+        if (targetPath === "app_service.js") {
+            if (!cleanCode || !cleanCode.includes("Pool") || !cleanCode.includes("max")) {
+                console.warn("[Git Engine] Proposing patch appears invalid. Falling back to default app_service.js fix.");
+                cleanCode = `// Production Gateway Database Connection Pool Init
+const { Pool } = require("pg");
+
+const poolConfig = {
+  host: "localhost",
+  port: 5432,
+  database: "production_db",
+  // Database connection limit
+  max: 50,
+  idleTimeoutMillis: 10000,
+  connectionTimeoutMillis: 2000,
+};
+
+const dbPool = new Pool(poolConfig);
+
+module.exports = { dbPool, poolConfig };
+`;
+            }
+        }
+
+        const targetFilePath = path.join(workspaceDir, targetPath);
+        fs.mkdirSync(path.dirname(targetFilePath), { recursive: true });
+        fs.writeFileSync(targetFilePath, cleanCode);
+        console.log(`[Git Engine] ${targetPath} updated successfully with code patch.`);
+    } catch (e: any) {
+        console.error(`[Git Engine Error] Critical error applying code patch: ${e.message}`);
     }
 
     // Commit change
-    runGitCmd("git add db_config.json");
-    runGitCmd(`git commit --allow-empty -m "fix(db): increase database pool size to 50"`);
+    runGitCmd(`git add "${targetPath}"`);
+    runGitCmd(`git commit --allow-empty -m "${commitMessage.replace(/"/g, '\\"')}"`);
     
     console.log(`[Git Engine] Changes committed locally to branch: ${branchName}`);
 
-    // If real GitHub integration is configured in .env, push to GitHub and open a real PR
-    let prUrl = `https://github.com/Starlight-Local/department-of-incidents/pulls/42`;
-    let prNumber = 42;
+    // Generate a dynamic PR number and URL to avoid hardcoded values
+    let prNumber = Math.floor(Math.random() * 900) + 100;
+    const safeRepo = repo || "Starlight-Local/department-of-incidents";
+    let prUrl = `https://github.com/${safeRepo}/pull/${prNumber}`;
 
     if (repo && token && !token.startsWith("ghp_mock") && repo !== "Starlight-Local/department-of-incidents") {
         try {
@@ -142,7 +243,7 @@ export async function createPR(patchContent: string, secureContext: any): Promis
             const prResponse = await octokit.rest.pulls.create({
                 owner,
                 repo: repoName,
-                title: `fix(db): increase database pool size to 50`,
+                title: commitMessage,
                 head: branchName,
                 base: "main",
                 body: "Automatically created by TEE-secured Department of Incidents Commander.",

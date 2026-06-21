@@ -1,0 +1,201 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Outfit', sans-serif;
+  background: #0d1117;
+  color: #e6edf3;
+  min-height: 100vh;
+}
+
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: #0d1117;
+}
+
+.login-wrapper {
+  width: 100%;
+  max-width: 400px;
+  padding: 1rem;
+}
+
+.login-card {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 12px;
+  padding: 2.5rem 2rem;
+}
+
+.logo-section {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.t3-logo {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 1rem;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 1.25rem;
+  color: #fff;
+}
+
+.title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #e6edf3;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
+}
+
+.subtitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: #8b949e;
+  letter-spacing: 0.1em;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #8b949e;
+  letter-spacing: 0.1em;
+}
+
+.input-field {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  color: #e6edf3;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.input-field:focus {
+  border-color: #3b82f6;
+}
+
+.input-field::placeholder {
+  color: #484f58;
+}
+
+.sign-in-btn {
+  width: 100%;
+  padding: 0.8rem;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.sign-in-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.sign-in-btn:disabled {
+  cursor: not-allowed;
+}
+
+.sign-in-btn.loading {
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  opacity: 0.8;
+}
+
+.sign-in-btn.success {
+  background: #10b981;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.footer-section {
+  margin-top: 1.5rem;
+  text-align: center;
+}
+
+.status-line {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  color: #8b949e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.green-dot {
+  width: 6px;
+  height: 6px;
+  background: #10b981;
+  border-radius: 50%;
+}
+
+.demo-creds {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  color: #8b949e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.pill {
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 20px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.65rem;
+  color: #e6edf3;
+}
