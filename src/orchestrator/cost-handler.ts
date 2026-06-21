@@ -5,10 +5,11 @@
  * AWS credentials never leave the TEE boundary (Zero-Secrets pattern).
  */
 
-import { agent, activeIncidents, Alert } from "./agent-core";
+import { activeIncidents, Alert, handshakeSession, authenticateUser, requestDelegation, executeUnder, personas } from "./agent-core";
 import { analyzeCostAnomaly, CostRemediation, COST_PROMPT } from "./llm";
 import { notifySlack } from "./notify";
 import { Severity } from "./severity";
+import { writeAudit } from "./audit";
 
 export interface CostAnomalyAlert {
     id: string;
@@ -39,7 +40,7 @@ export async function handleCostAnomalyIncident(alert: CostAnomalyAlert): Promis
 
     // Create incident entry
     const triggeredTime = Date.now();
-    const finOpsDID = process.env.FINOPS_DID || process.env.APPROVER_DID || "did:t3:user:finops";
+    const finOpsDID = personas.alice || "simulatedFallbackDid:alice:default"; // Alice is oncall/finops in the session mapping
 
     const incidentAlert: Alert = {
         id: alert.id,
@@ -77,11 +78,11 @@ export async function handleCostAnomalyIncident(alert: CostAnomalyAlert): Promis
     try {
         // Step 1: T3 Session Handshake
         incident.status = "TEE Session Handshake";
-        const session = await agent.handshake();
+        const session = await handshakeSession();
         incident.session = session;
 
         // Step 2: Audit cost anomaly detection
-        await agent.audit.write({
+        await writeAudit({
             action: "COST_ANOMALY_DETECTED",
             actor: finOpsDID,
             incidentId: alert.id,
@@ -90,7 +91,7 @@ export async function handleCostAnomalyIncident(alert: CostAnomalyAlert): Promis
 
         // Step 3: Authenticate under FinOps DID to read AWS cost data
         incident.status = "Analyzing Cost Data in TEE";
-        const remediations: CostRemediation[] = await agent.authenticate({
+        const remediations: CostRemediation[] = await authenticateUser({
             session,
             delegateDID: finOpsDID,
             scope: "aws:read",
@@ -109,7 +110,7 @@ export async function handleCostAnomalyIncident(alert: CostAnomalyAlert): Promis
                     secureContext
                 );
 
-                await agent.audit.write({
+                await writeAudit({
                     action: "LLM_INVOKED_IN_TEE",
                     actor: finOpsDID,
                     incidentId: alert.id,
@@ -124,7 +125,7 @@ export async function handleCostAnomalyIncident(alert: CostAnomalyAlert): Promis
         const totalEstimatedSaving = remediations.reduce((sum, r) => sum + r.estimatedSaving, 0);
         incident.patch = remediations.map(r => `${r.action}: ${r.resourceId} (${r.service}) — save $${r.estimatedSaving}`).join("\n");
 
-        await agent.audit.write({
+        await writeAudit({
             action: "COST_ANALYSIS_COMPLETE",
             actor: finOpsDID,
             incidentId: alert.id,
@@ -135,7 +136,7 @@ export async function handleCostAnomalyIncident(alert: CostAnomalyAlert): Promis
 
         // Step 5: Execute remediations with tiered approvals
         incident.status = "Executing Remediations";
-        const financeLeadDID = process.env.FINANCE_LEAD_DID || process.env.APPROVER_DID || "did:t3:user:finance-lead";
+        const financeLeadDID = personas.charlie || "simulatedFallbackDid:charlie:default"; // Charlie is finance lead in session mapping
         let totalSaving = 0;
         const executedActions: string[] = [];
 
@@ -144,7 +145,7 @@ export async function handleCostAnomalyIncident(alert: CostAnomalyAlert): Promis
 
             if (remediation.action === "flag-for-review") {
                 // No approval needed — just log for review
-                await agent.audit.write({
+                await writeAudit({
                     action: "COST_RESOURCE_FLAGGED",
                     actor: finOpsDID,
                     incidentId: alert.id,
@@ -164,7 +165,7 @@ export async function handleCostAnomalyIncident(alert: CostAnomalyAlert): Promis
 
             // Request approvals
             const approvalPromises = approvers.map(did =>
-                agent.requestDelegation({
+                requestDelegation({
                     session,
                     delegateDID: did,
                     scope: `aws:${remediation.action}`,
@@ -185,7 +186,7 @@ export async function handleCostAnomalyIncident(alert: CostAnomalyAlert): Promis
 
             // Log approvals
             for (const approval of approvalResults) {
-                await agent.audit.write({
+                await writeAudit({
                     action: "COST_REMEDIATION_APPROVED",
                     actor: approval.approverDID,
                     incidentId: alert.id,
@@ -198,7 +199,7 @@ export async function handleCostAnomalyIncident(alert: CostAnomalyAlert): Promis
             const primaryApproval = approvalResults[0];
             incident.status = `Executing ${remediation.action} on ${remediation.resourceId}`;
 
-            await agent.executeUnder({
+            await executeUnder({
                 session,
                 delegateDID: primaryApproval.approverDID,
                 credential: primaryApproval.credential,
@@ -224,7 +225,7 @@ export async function handleCostAnomalyIncident(alert: CostAnomalyAlert): Promis
 
                     // Write execution to audit
                     const actionUpper = remediation.action.toUpperCase();
-                    await agent.audit.write({
+                    await writeAudit({
                         action: `AWS_RESOURCE_${actionUpper === "TERMINATE" ? "TERMINATED" : actionUpper === "STOP" ? "STOPPED" : "RIGHTSIZED"}`,
                         actor: primaryApproval.approverDID,
                         incidentId: alert.id,
@@ -246,7 +247,7 @@ export async function handleCostAnomalyIncident(alert: CostAnomalyAlert): Promis
         incident.resolvedTime = Date.now();
         const resolutionTimeSec = ((incident.resolvedTime - triggeredTime) / 1000).toFixed(1);
 
-        await agent.audit.write({
+        await writeAudit({
             action: "COST_ANOMALY_RESOLVED",
             actor: finOpsDID,
             incidentId: alert.id,

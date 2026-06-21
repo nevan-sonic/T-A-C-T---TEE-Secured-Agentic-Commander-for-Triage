@@ -3,10 +3,19 @@ require("dotenv").config({ path: require("path").resolve(__dirname, "../.env") }
 
 const PORT = 3000;
 const BASE_URL = `http://localhost:${PORT}`;
-const PRIVATE_KEY = process.env.T3_PRIVATE_KEY || process.env.T3N_API_KEY || ethers.Wallet.createRandom().privateKey;
-const wallet = new ethers.Wallet(PRIVATE_KEY);
-const aliceAddress = wallet.address.toLowerCase();
-const aliceDID = `did:t3n:${aliceAddress.startsWith("0x") ? aliceAddress.substring(2) : aliceAddress}`;
+
+// Persona keys lookup mapping
+const PERSONA_KEYS = {
+    alice: process.env.ALICE_PRIVATE_KEY || ethers.keccak256(ethers.toUtf8Bytes("alice")),
+    bob: process.env.BOB_PRIVATE_KEY || ethers.keccak256(ethers.toUtf8Bytes("bob")),
+    charlie: process.env.CHARLIE_PRIVATE_KEY || ethers.keccak256(ethers.toUtf8Bytes("charlie")),
+    agent: process.env.T3_PRIVATE_KEY || process.env.T3N_API_KEY
+};
+
+const DEFAULT_PRIVATE_KEY = process.env.T3_PRIVATE_KEY || process.env.T3N_API_KEY || ethers.Wallet.createRandom().privateKey;
+const defaultWallet = new ethers.Wallet(DEFAULT_PRIVATE_KEY);
+const defaultAliceAddress = defaultWallet.address.toLowerCase();
+let aliceDID = `did:t3n:${defaultAliceAddress.startsWith("0x") ? defaultAliceAddress.substring(2) : defaultAliceAddress}`;
 
 async function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -38,6 +47,8 @@ async function request(path, method = "GET", body = null) {
     throw lastError;
 }
 
+let personasGlobal = null;
+
 async function signAndApprovePending() {
     console.log("[Test Runner] Querying pending approvals...");
     const approvals = await request("/api/approvals");
@@ -48,8 +59,39 @@ async function signAndApprovePending() {
 
     for (const app of approvals) {
         console.log(`[Test Runner] Signing approval ID: ${app.id} for approver ${app.approverDID} (scope: ${app.scope})...`);
-        const matches = app.approverDID.match(/did:t3n:([0-9a-fA-F]+)/) || app.approverDID.match(/did:t3:user:([0-9a-fA-F]+)/) || app.approverDID.match(/did:t3:user:(\w+)/);
-        const tid = matches ? matches[1].toLowerCase() : "0000000000000000000000000000000000000000";
+        const matches = app.approverDID.match(/did:t3n:([0-9a-fA-F]+)/) || app.approverDID.match(/simulatedFallbackDid:\w+:([0-9a-fA-F]+)/) || app.approverDID.match(/did:t3:user:([0-9a-fA-F]+)/);
+        const approverAddr = matches ? matches[1].toLowerCase() : "";
+
+        // Find the matching private key using personas mapping first
+        let signingWallet = defaultWallet;
+        let foundPersona = null;
+        if (personasGlobal) {
+            for (const [name, did] of Object.entries(personasGlobal)) {
+                if (did && did.toLowerCase() === app.approverDID.toLowerCase()) {
+                    foundPersona = name;
+                    break;
+                }
+            }
+        }
+
+        if (foundPersona && PERSONA_KEYS[foundPersona]) {
+            signingWallet = new ethers.Wallet(PERSONA_KEYS[foundPersona]);
+            console.log(`[Test Runner] Resolved approverDID '${app.approverDID}' to persona '${foundPersona}' (${signingWallet.address})`);
+        } else {
+            // Fallback: match by address hex
+            for (const [name, key] of Object.entries(PERSONA_KEYS)) {
+                if (key) {
+                    const w = new ethers.Wallet(key);
+                    if (w.address.toLowerCase().replace("0x", "") === approverAddr) {
+                        signingWallet = w;
+                        console.log(`[Test Runner] Resolved approverDID '${app.approverDID}' by address matching to persona '${name}': ${w.address}`);
+                        break;
+                    }
+                }
+            }
+        }
+
+        const tid = signingWallet.address.toLowerCase().replace("0x", "");
         
         // Construct the standard message
         const message = `T3 Agent Authorization Grant\nAgent DID: did:t3:agent:department-of-incidents\nContract: z:${tid}:incident-contracts\nFunction: ${app.scope}\nOutbound Hosts: api.github.com\nApproval ID: ${app.id}`;
@@ -57,14 +99,12 @@ async function signAndApprovePending() {
         // Fallback message (friend's format)
         const fallbackMessage = `T3 Agent Authorization Grant\nAgent DID: did:t3:agent:department-of-incidents\nContract: z:system:incident-contracts\nFunction: incident-${app.id}\nApproval ID: ${app.id}`;
         
-        // We will sign standard format if scope is provided, otherwise fallback.
-        // For testing we will sign both and verify one of them. Ethers signs the string.
         let msgToSign = message;
         if (app.scope.startsWith("incident-")) {
             msgToSign = fallbackMessage;
         }
 
-        const signature = await wallet.signMessage(msgToSign);
+        const signature = await signingWallet.signMessage(msgToSign);
         console.log(`[Test Runner] Signature generated: ${signature.substring(0, 25)}...`);
 
         const approveResult = await request("/api/approve", "POST", { id: app.id, signature });
@@ -75,6 +115,27 @@ async function signAndApprovePending() {
 
 async function run() {
     try {
+        console.log("[Test Runner] Polling /api/personas for dynamically resolved DIDs...");
+        let personas = null;
+        for (let attempt = 1; attempt <= 30; attempt++) {
+            try {
+                personas = await request("/api/personas");
+                if (personas && personas.alice) {
+                    console.log("[Test Runner] Dynamic personas retrieved successfully:", personas);
+                    break;
+                }
+            } catch (err) {
+                // ignore and retry
+            }
+            await sleep(1000);
+        }
+
+        if (!personas || !personas.alice) {
+            throw new Error("Failed to load personas from control plane after 30 seconds.");
+        }
+
+        personasGlobal = personas;
+        aliceDID = personas.alice;
         console.log("[Test Runner] Initializing developer DID on control plane...");
         await request("/api/register-active-did", "POST", { did: aliceDID });
         console.log(`[Test Runner] Active browser DID registered: ${aliceDID}`);

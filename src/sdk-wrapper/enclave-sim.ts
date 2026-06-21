@@ -38,6 +38,7 @@ class EnclaveSimulator {
     private mapsConfig: Map<string, MapConfig> = new Map();
     private ledger: LedgerEntry[] = [];
     private approvals: Map<string, PendingApproval> = new Map();
+    private didToAddressMap: Map<string, string> = new Map();
 
     // Counter for allocating numeric Contract IDs
     private nextContractId: number = 1000;
@@ -47,6 +48,23 @@ class EnclaveSimulator {
         this.kvStore.set("users", new Map());
         this.kvStore.set("auth", new Map());
         this.kvStore.set("dids", new Map());
+    }
+
+    public registerDidAddress(did: string, address: string) {
+        this.didToAddressMap.set(did.toLowerCase(), address.toLowerCase());
+        console.log(`[TEE Enclave] Registered DID mapping: ${did.toLowerCase()} -> ${address.toLowerCase()}`);
+    }
+
+    public getAddressForDid(did: string): string {
+        const mapped = this.didToAddressMap.get(did.toLowerCase());
+        if (mapped) return mapped;
+        
+        const matches = did.match(/did:t3n:([0-9a-fA-F]+)/) || did.match(/simulatedFallbackDid:\w+:([0-9a-fA-F]+)/) || did.match(/did:t3:user:([0-9a-fA-F]+)/);
+        if (matches) {
+            const hex = matches[1];
+            return hex.startsWith("0x") ? hex : "0x" + hex;
+        }
+        return "";
     }
 
     public allocateContractId(): number {
@@ -183,18 +201,10 @@ class EnclaveSimulator {
         }
 
         // Verify the Ethereum personal sign signature
-        // Extract address from DID: did:t3n:<eth_address_hex>
-        const matches = approval.approverDID.match(/did:t3n:([0-9a-fA-F]+)/) || approval.approverDID.match(/did:t3:user:([0-9a-fA-F]+)/) || approval.approverDID.match(/did:t3:user:(\w+)/);
-        if (!matches) {
-            console.log(`[TEE Delegator] Cryptographic validation FAILED: Approver DID is non-hex or custom.`);
-            return false;
-        }
-
-        const expectedAddressHex = matches[1];
-        let expectedAddress = expectedAddressHex.startsWith("0x") ? expectedAddressHex : "0x" + expectedAddressHex;
+        const expectedAddress = this.getAddressForDid(approval.approverDID);
 
         // Auto-approve if expectedAddress is not a valid Ethereum address
-        if (!ethers.isAddress(expectedAddress)) {
+        if (!expectedAddress || !ethers.isAddress(expectedAddress)) {
             console.log(`[TEE Delegator] Cryptographic validation FAILED: Expected address '${expectedAddress}' is not a valid Ethereum address.`);
             return false;
         }
@@ -235,9 +245,8 @@ class EnclaveSimulator {
         for (const app of this.approvals.values()) {
             if (app.status === "approved" && app.approverDID.toLowerCase() === did.toLowerCase() && app.signature === credential) {
                 // Cryptographically re-verify the signature at validation/execution time
-                const matches = did.match(/did:t3n:([0-9a-fA-F]+)/) || did.match(/did:t3:user:([0-9a-fA-F]+)/);
-                if (!matches) continue;
-                const expectedAddress = matches[1].startsWith("0x") ? matches[1] : "0x" + matches[1];
+                const expectedAddress = this.getAddressForDid(did);
+                if (!expectedAddress || !ethers.isAddress(expectedAddress)) continue;
 
                 try {
                     const tid = expectedAddress.toLowerCase().replace("0x", "");

@@ -83,6 +83,7 @@ try {
     const coreModule = require("./dist/orchestrator/agent-core");
     handleIncident = coreModule.handleIncident;
     activeIncidents = coreModule.activeIncidents;
+    const { initT3n, personas } = coreModule;
     
     const auditModule = require("./dist/orchestrator/audit");
     readAuditLedger = auditModule.readAuditLedger;
@@ -106,40 +107,29 @@ try {
         console.log("[Control Plane] Cost Handler loaded.");
     } catch (e) { console.log("[Control Plane] Warning: Cost Handler not found."); }
     
-    // Generate a secure random private key on startup to avoid hardcoding secrets
-    const randomKey = ethers.Wallet.createRandom().privateKey;
-    
     // Seed credentials on startup (mimics tenant control plane execution)
-    const envTid = process.env.T3N_TENANT_DID ? process.env.T3N_TENANT_DID.split(":").pop() : "bccc24bd2926d5c0065cb99f4d032fdc4f2289ec";
-    enclaveSimulator.createMap(envTid, "secrets", "private", ["1001"], ["1001"]);
-    enclaveSimulator.setMapEntry(envTid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "ghp_mockPersonalAccessTokenForDemoSafety123");
-    // Zero-Secrets LLM Proxy: Seed Groq API key into TEE vault
-    enclaveSimulator.setMapEntry(envTid, "secrets", "groq_api_key", process.env.GROQ_API_KEY || "");
-    // Zero-Secrets AWS: Seed AWS credentials into TEE vault
-    enclaveSimulator.setMapEntry(envTid, "secrets", "aws_access_key_id", process.env.AWS_ACCESS_KEY_ID || "AKIAIOSFODNN7EXAMPLE");
-    enclaveSimulator.setMapEntry(envTid, "secrets", "aws_secret_access_key", process.env.AWS_SECRET_ACCESS_KEY || "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
-
-    const fallbackKey = process.env.T3N_API_KEY || process.env.T3_PRIVATE_KEY || randomKey;
-    const derivedTid = new ethers.Wallet(fallbackKey).address.toLowerCase();
-    if (envTid.toLowerCase() !== derivedTid) {
-        enclaveSimulator.createMap(derivedTid, "secrets", "private", ["1001"], ["1001"]);
-        enclaveSimulator.setMapEntry(derivedTid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "ghp_mockPersonalAccessTokenForDemoSafety123");
-    }
-
-    // Seed default ONCALL_ENGINEER_DID on startup if different
-    const defaultDid = process.env.ONCALL_ENGINEER_DID;
-    if (defaultDid) {
-        const matches = defaultDid.match(/did:t3n:([0-9a-fA-F]+)/) || defaultDid.match(/did:t3:user:([0-9a-fA-F]+)/);
-        if (matches) {
-            const defaultTid = matches[1].toLowerCase();
-            if (envTid.toLowerCase() !== defaultTid && derivedTid !== defaultTid) {
-                enclaveSimulator.createMap(defaultTid, "secrets", "private", ["1001"], ["1001"]);
-                enclaveSimulator.setMapEntry(defaultTid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "ghp_mockPersonalAccessTokenForDemoSafety123");
+    initT3n().then(() => {
+        console.log("[Control Plane] initT3n completed successfully. Resolved DIDs:", personas);
+        
+        // Loop over resolved personas and seed maps/secrets in simulator
+        for (const [name, did] of Object.entries(personas)) {
+            if (did) {
+                const matches = did.match(/did:t3n:([0-9a-fA-F]+)/) || did.match(/simulatedFallbackDid:\w+:([0-9a-fA-F]+)/) || did.match(/did:t3:user:([0-9a-fA-F]+)/);
+                if (matches) {
+                    const tid = matches[1].toLowerCase();
+                    enclaveSimulator.createMap(tid, "secrets", "private", ["1001"], ["1001"]);
+                    enclaveSimulator.setMapEntry(tid, "secrets", "github_token", process.env.GITHUB_TOKEN || "ghp_mockPersonalAccessTokenForDemoSafety123");
+                    enclaveSimulator.setMapEntry(tid, "secrets", "groq_api_key", process.env.GROQ_API_KEY || "");
+                    enclaveSimulator.setMapEntry(tid, "secrets", "aws_access_key_id", process.env.AWS_ACCESS_KEY_ID || "AKIAIOSFODNN7EXAMPLE");
+                    enclaveSimulator.setMapEntry(tid, "secrets", "aws_secret_access_key", process.env.AWS_SECRET_ACCESS_KEY || "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
+                }
             }
         }
-    }
-    
-    console.log("[Control Plane] Enclave simulator loaded and private z-namespace secrets seeded.");
+        console.log("[Control Plane] Enclave simulator loaded and private z-namespace secrets seeded dynamically.");
+    }).catch(err => {
+        console.error("[Control Plane] initT3n failed:", err);
+    });
+
     console.log("[Control Plane] Contract published: department-of-incidents v0.1.0 (functions: investigate-logs, create-fix-pr, merge-fix, revert-commit)");
     console.log("[Control Plane] Contract registered at z:system:incident-contracts (Contract ID: 1001)");
 } catch (e) {
@@ -148,36 +138,51 @@ try {
 
 // Canonical approver DID is always derived from the configured env key — never overwritten by browser sessions
 const canonicalKey = process.env.T3N_API_KEY || process.env.T3_PRIVATE_KEY || null;
-let activeBrowserDID = process.env.ONCALL_ENGINEER_DID || process.env.APPROVER_DID || "";
-if (!activeBrowserDID && canonicalKey) {
+let activeBrowserDID = "";
+if (canonicalKey) {
     const derived = new ethers.Wallet(canonicalKey).address.toLowerCase();
     activeBrowserDID = "did:t3n:" + derived.replace("0x", "");
-}
-if (!activeBrowserDID) {
-    // absolute last resort — random wallet
+} else {
     const derived = new ethers.Wallet(ethers.Wallet.createRandom().privateKey).address.toLowerCase();
     activeBrowserDID = "did:t3n:" + derived.replace("0x", "");
 }
 
+function getActiveBrowserDID() {
+    try {
+        const coreModule = require("./dist/orchestrator/agent-core");
+        if (coreModule.personas && coreModule.personas.alice) {
+            return coreModule.personas.alice;
+        }
+    } catch (e) {}
+    return activeBrowserDID;
+}
+
+// Endpoint to expose dynamically resolved personas on the server
+app.get("/api/personas", (req, res) => {
+    try {
+        const coreModule = require("./dist/orchestrator/agent-core");
+        res.json(coreModule.personas);
+    } catch (err) {
+        res.json({});
+    }
+});
+
 app.post("/api/register-active-did", (req, res) => {
     const { did } = req.body;
-    if (did && (did.startsWith("did:t3n:") || did.startsWith("did:t3:"))) {
-        // Do NOT overwrite activeBrowserDID or ACTIVE_BROWSER_DID — the canonical approver
-        // is locked to the env-configured wallet. We only seed enclave secrets for this DID.
-        console.log(`[Control Plane] Browser session DID noted (not overwriting approver): ${did}`);
+    if (did && (did.startsWith("did:t3n:") || did.startsWith("did:t3:") || did.startsWith("simulatedFallbackDid:"))) {
+        console.log(`[Control Plane] Browser session DID noted: ${did}`);
         
-        const matches = did.match(/did:t3n:([0-9a-fA-F]+)/) || did.match(/did:t3:user:([0-9a-fA-F]+)/);
+        const matches = did.match(/did:t3n:([0-9a-fA-F]+)/) || did.match(/simulatedFallbackDid:\w+:([0-9a-fA-F]+)/) || did.match(/did:t3:user:([0-9a-fA-F]+)/);
         if (matches && enclaveSimulator) {
             const tid = matches[1].toLowerCase();
             enclaveSimulator.createMap(tid, "secrets", "private", ["1001"], ["1001"]);
             enclaveSimulator.setMapEntry(tid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "ghp_mockPersonalAccessTokenForDemoSafety123");
         }
         
-        return res.json({ status: "registered", did: activeBrowserDID });
+        return res.json({ status: "registered", did: getActiveBrowserDID() });
     }
     res.status(400).json({ error: "Invalid DID format" });
 });
-
 
 // [Dev-only] Expose the server's active signing private key so the browser dashboard
 // can sync its local fallback wallet — prevents "address mismatch" when test runners
@@ -186,7 +191,7 @@ app.post("/api/register-active-did", (req, res) => {
 app.get("/api/dev-wallet", (req, res) => {
     const privateKey = process.env.T3N_API_KEY || process.env.T3_PRIVATE_KEY || null;
     if (!privateKey) {
-        return res.json({ privateKey: null, did: activeBrowserDID });
+        return res.json({ privateKey: null, did: getActiveBrowserDID() });
     }
     const wallet = new ethers.Wallet(privateKey);
     const did = "did:t3n:" + wallet.address.toLowerCase().replace("0x", "");
@@ -223,8 +228,8 @@ app.post("/api/webhook", async (req, res) => {
                 `Instance: ${labels.instance || "unknown"}`,
                 `GeneratorURL: ${promAlert.generatorURL || "N/A"}`
             ],
-            onCallEngineerDID: activeBrowserDID, // Fallback Alice address / active browser DID
-            codeOwnerDID: activeBrowserDID
+            onCallEngineerDID: getActiveBrowserDID(), // Fallback Alice address / active browser DID
+            codeOwnerDID: getActiveBrowserDID()
         };
     } 
     // 2. Detect Datadog Webhook Payload
@@ -254,8 +259,8 @@ app.post("/api/webhook", async (req, res) => {
                 `Event Type: ${rawAlert.event_type || "N/A"}`,
                 `Monitor Status: ${rawAlert.alert_status || "N/A"}`
             ],
-            onCallEngineerDID: activeBrowserDID,
-            codeOwnerDID: activeBrowserDID
+            onCallEngineerDID: getActiveBrowserDID(),
+            codeOwnerDID: getActiveBrowserDID()
         };
     } 
     // 3. Fallback to Standard T.A.C.T format
@@ -674,8 +679,8 @@ setInterval(() => {
                 errorRate,
                 p99Latency: 12000,
                 logs: dynamicLogs,
-                onCallEngineerDID: activeBrowserDID,
-                codeOwnerDID: activeBrowserDID
+                onCallEngineerDID: getActiveBrowserDID(),
+                codeOwnerDID: getActiveBrowserDID()
             };
 
             connectionLogs = [];

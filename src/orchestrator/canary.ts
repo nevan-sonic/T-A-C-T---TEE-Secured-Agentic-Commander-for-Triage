@@ -5,7 +5,7 @@
  * computing a rolling average error rate to decide rollback vs resolve.
  */
 
-import { agent } from "./agent-core";
+import { writeAudit } from "./audit";
 
 interface CanaryObservation {
     round: number;
@@ -56,7 +56,7 @@ export async function runCanaryWindow(
 
             // Write each observation to audit ledger
             const action = passed ? "CANARY_PASS" : "CANARY_FAIL";
-            await agent.audit.write({
+            await writeAudit({
                 action,
                 actor: actorDID,
                 incidentId,
@@ -75,7 +75,7 @@ export async function runCanaryWindow(
                 timestamp: Date.now()
             });
 
-            await agent.audit.write({
+            await writeAudit({
                 action: "CANARY_FAIL",
                 actor: actorDID,
                 incidentId,

@@ -35,8 +35,8 @@ export function getSeverityConfig(sev: Severity): DelegationConfig {
 }
 
 export async function classifySeverity(logs: string[], secureContext?: { getSecret: (key: string) => string | null }): Promise<Severity> {
-    const { agent } = require("./agent-core");
-    if (agent && agent.isClientActive() && !agent.isBillingFallbackActive()) {
+    const { getIsClientActive, getIsBillingFallbackActive } = require("./agent-core");
+    if (getIsClientActive() && !getIsBillingFallbackActive()) {
         if (!secureContext) {
             console.log(`[Severity Classifier] ❌ SECURITY ERROR: Direct secret access for 'groq_api_key' is forbidden on real testnet.`);
             throw new Error("[Security] Direct secret access is forbidden on real testnet.");

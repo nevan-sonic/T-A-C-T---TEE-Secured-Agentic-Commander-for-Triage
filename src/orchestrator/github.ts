@@ -162,7 +162,7 @@ export async function createPR(
     // Create new branch
     const branchName = customBranchName || ("fix/" + targetPath.replace(/[^a-zA-Z0-9]/g, "-") + "-" + Math.random().toString(36).substring(2, 6));
     const safeBranch = sanitizeShellArg(branchName);
-    runGitCmd(`git checkout -b ${safeBranch}`);
+    runGitCmd(`git checkout -B ${safeBranch}`);
     
     // Apply patch
     try {

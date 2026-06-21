@@ -4,10 +4,11 @@
  * Creates a tamper-proof audit trail of exactly what was executed at each step.
  */
 
-import { agent, activeIncidents, Alert } from "./agent-core";
+import { activeIncidents, Alert, handshakeSession, authenticateUser, requestDelegation, personas } from "./agent-core";
 import { parseRunbook, RunbookStep, RUNBOOK_PROMPT } from "./llm";
 import { notifySlack } from "./notify";
 import { Severity } from "./severity";
+import { writeAudit } from "./audit";
 
 export interface RunbookAlert {
     id: string;
@@ -51,8 +52,8 @@ export async function handleRunbookIncident(alert: RunbookAlert): Promise<void> 
             `Details: ${alert.details || "N/A"}`,
             `Service: ${alert.service}`
         ],
-        onCallEngineerDID: process.env.ONCALL_ENGINEER_DID || process.env.APPROVER_DID || "did:t3:user:oncall-engineer",
-        codeOwnerDID: process.env.ONCALL_ENGINEER_DID || process.env.APPROVER_DID || "did:t3:user:oncall-engineer"
+        onCallEngineerDID: personas.alice || "simulatedFallbackDid:alice:default",
+        codeOwnerDID: personas.alice || "simulatedFallbackDid:alice:default"
     };
 
     activeIncidents.set(alert.id, {
@@ -74,10 +75,10 @@ export async function handleRunbookIncident(alert: RunbookAlert): Promise<void> 
     try {
         // Step 1: T3 Session Handshake
         incident.status = "TEE Session Handshake";
-        const session = await agent.handshake();
+        const session = await handshakeSession();
         incident.session = session;
 
-        const oncallDID = process.env.ONCALL_ENGINEER_DID || process.env.APPROVER_DID || "did:t3:user:oncall-engineer";
+        const oncallDID = personas.alice || "simulatedFallbackDid:alice:default";
 
         // Step 2: Fetch/parse runbook content
         incident.status = "Fetching Runbook";
@@ -93,7 +94,7 @@ export async function handleRunbookIncident(alert: RunbookAlert): Promise<void> 
             console.log(`[Runbook Handler] Fetching runbook from URL: ${alert.runbookUrl}...`);
             runbookContent = `Runbook for: ${alert.title}\nService: ${alert.service}\n\n1. Check current system status\n2. Identify top resource consumers\n3. Restart affected service\n4. Verify service recovery\n5. Check connection status`;
 
-            await agent.authenticate({
+            await authenticateUser({
                 session,
                 delegateDID: oncallDID,
                 scope: "runbook:read",
@@ -109,7 +110,7 @@ export async function handleRunbookIncident(alert: RunbookAlert): Promise<void> 
 
         // Step 3: Parse runbook into structured steps via AI
         incident.status = "Parsing Runbook Steps";
-        steps = await agent.authenticate({
+        steps = await authenticateUser({
             session,
             delegateDID: oncallDID,
             scope: "runbook:parse",
@@ -121,7 +122,7 @@ export async function handleRunbookIncident(alert: RunbookAlert): Promise<void> 
             },
             action: async (secureContext) => {
                 const parsedSteps = await parseRunbook(alert.title, runbookContent, secureContext);
-                await agent.audit.write({
+                await writeAudit({
                     action: "LLM_INVOKED_IN_TEE",
                     actor: oncallDID,
                     incidentId: alert.id,
@@ -134,14 +135,14 @@ export async function handleRunbookIncident(alert: RunbookAlert): Promise<void> 
         // Store steps in incident for dashboard polling
         incident.runbookSteps = steps;
 
-        await agent.audit.write({
+        await writeAudit({
             action: "RUNBOOK_FETCHED",
             actor: oncallDID,
             incidentId: alert.id,
             details: `Runbook fetched and parsed: ${steps.length} steps. Source: ${alert.runbookUrl || "direct"}.`
         });
 
-        await notifySlack(`📝 *Runbook Parsed:* ${steps.length} steps identified.\n${steps.map(s => `${s.index}. [${s.type.toUpperCase()}] ${s.description}${s.requiresApproval ? " 🔒" : ""}`).join("\n")}`);
+        await notifySlack(`%EF%B8%8F *Runbook Parsed:* ${steps.length} steps identified.\n${steps.map(s => `${s.index}. [${s.type.toUpperCase()}] ${s.description}${s.requiresApproval ? " 🔒" : ""}`).join("\n")}`);
 
         // Step 4: Execute each step sequentially
         incident.status = "Executing Runbook Steps";
@@ -154,7 +155,7 @@ export async function handleRunbookIncident(alert: RunbookAlert): Promise<void> 
                 step.status = "pending";
                 incident.runbookSteps = [...steps]; // Update dashboard
 
-                await agent.audit.write({
+                await writeAudit({
                     action: "RUNBOOK_STEP_PENDING_APPROVAL",
                     actor: oncallDID,
                     incidentId: alert.id,
@@ -164,7 +165,7 @@ export async function handleRunbookIncident(alert: RunbookAlert): Promise<void> 
                 console.log(`[Runbook Handler] 🔒 Step ${step.index} requires approval. Requesting delegation...`);
 
                 // Request delegation for this specific step
-                const delegation = await agent.requestDelegation({
+                const delegation = await requestDelegation({
                     session,
                     delegateDID: oncallDID,
                     scope: `runbook:execute:step-${step.index}`,
@@ -182,7 +183,7 @@ export async function handleRunbookIncident(alert: RunbookAlert): Promise<void> 
                 step.approvalId = delegation.credential;
                 step.approvedBy = delegation.approverDID;
 
-                await agent.audit.write({
+                await writeAudit({
                     action: "RUNBOOK_STEP_APPROVED",
                     actor: delegation.approverDID,
                     incidentId: alert.id,
@@ -196,7 +197,7 @@ export async function handleRunbookIncident(alert: RunbookAlert): Promise<void> 
                 step.result = `Executed: ${step.description}`;
                 incident.runbookSteps = [...steps];
 
-                await agent.audit.write({
+                await writeAudit({
                     action: "RUNBOOK_STEP_EXECUTED",
                     actor: delegation.approverDID,
                     incidentId: alert.id,
@@ -211,7 +212,7 @@ export async function handleRunbookIncident(alert: RunbookAlert): Promise<void> 
                 step.result = `Auto-executed: ${step.description}`;
                 incident.runbookSteps = [...steps];
 
-                await agent.audit.write({
+                await writeAudit({
                     action: "RUNBOOK_STEP_EXECUTED",
                     actor: oncallDID,
                     incidentId: alert.id,
@@ -227,7 +228,7 @@ export async function handleRunbookIncident(alert: RunbookAlert): Promise<void> 
         incident.resolvedTime = Date.now();
         const resolutionTimeSec = ((incident.resolvedTime - triggeredTime) / 1000).toFixed(1);
 
-        await agent.audit.write({
+        await writeAudit({
             action: "RUNBOOK_COMPLETED",
             actor: oncallDID,
             incidentId: alert.id,

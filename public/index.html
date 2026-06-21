@@ -314,6 +314,11 @@
                 <h2>4. T3 DELEGATION & APPROVAL GUARD</h2>
                 <p class="card-desc">Gated transaction approvals. Requires EIP-191 personal signatures from code owners or on-call engineers.</p>
                 
+                <div class="cosmetic-warning-banner" style="background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 6px; padding: 0.5rem 0.75rem; margin-bottom: 1rem; color: #f59e0b; font-size: 0.72rem; display: flex; align-items: center; gap: 0.5rem;">
+                    <span style="font-size: 0.9rem;">⚠️</span>
+                    <span><strong>Visual Demo Only:</strong> This EIP-191 signing ceremony is a cosmetic simulation of the approval gate; real cryptographic authorization occurs inside the TEE boundary using standard SDK <code>agent-auth-update</code>.</span>
+                </div>
+                
                 <div id="no-approvals" class="empty-state">
                     <div class="shield-icon"></div>
                     <p>No pending delegation requests. System is secure.</p>
@@ -499,7 +504,7 @@
             }, 1500);
             fetchApprovals();
             fetchLedger();
-            initWallet();
+            fetchPersonas().then(initWallet);
         }
 
         // Chart.js Telemetry Initialization
@@ -646,10 +651,33 @@
         let fallbackWallet = new ethers.Wallet(fallbackPrivateKey);
         let fallbackAddress = fallbackWallet.address.toLowerCase();
 
-        // Mocks for DIDs matches the dynamic fallback key
         let AliceDID = "did:t3n:" + fallbackAddress.replace("0x", "");
-        const BobDID = AliceDID;
-        const CharlieDID = AliceDID;
+        let BobDID = AliceDID;
+        let CharlieDID = AliceDID;
+
+        async function fetchPersonas() {
+            try {
+                const res = await fetch("/api/personas");
+                const personas = await res.json();
+                if (personas.alice) {
+                    AliceDID = personas.alice;
+                    BobDID = personas.bob || personas.alice;
+                    CharlieDID = personas.charlie || personas.alice;
+                    console.log("[Dashboard] Loaded personas from server:", personas);
+                    
+                    // Update preview payloads
+                    payloads.P2.onCallEngineerDID = AliceDID;
+                    payloads.P2.codeOwnerDID = AliceDID;
+                    payloads.P1.onCallEngineerDID = AliceDID;
+                    payloads.P1.codeOwnerDID = AliceDID;
+                    payloads.P3.onCallEngineerDID = AliceDID;
+                    payloads.P3.codeOwnerDID = AliceDID;
+                    selectScenario(currentScenario);
+                }
+            } catch (e) {
+                console.error("[Dashboard] Failed to fetch personas:", e);
+            }
+        }
 
         // Dynamically resolve AliceDID based on MetaMask or local key
         async function registerDID(did) {
@@ -901,7 +929,7 @@
                             <p><strong>Requested Scope:</strong> <code>${app.scope}</code></p>
                         </div>
                         <div class="approval-actions">
-                            <button class="action-btn approve-btn" onclick="signApproval('${app.id}', '${app.approverDID}')">Confirm & Sign with T3 Identity</button>
+                            <button class="action-btn approve-btn" onclick="signApproval('${app.id}', '${app.approverDID}', '${app.scope}')">Confirm & Sign with T3 Identity</button>
                         </div>
                     </div>
                 `).join('');
@@ -910,12 +938,12 @@
             }
         }
 
-        async function signApproval(id, approverDID) {
+        async function signApproval(id, approverDID, scope) {
             appendTerminalLog(`Initiating EIP-191 Personal Sign signature challenge for approval: ${id}...`, 'system');
             
             // Build BOTH message formats (server accepts either)
-            const tid = approverDID.replace(/^did:t3n:/, '').replace(/^did:t3:user:/, '').toLowerCase();
-            const standardMessage = `T3 Agent Authorization Grant\nAgent DID: did:t3:agent:department-of-incidents\nContract: z:${tid}:incident-contracts\nFunction: ${id}\nOutbound Hosts: api.github.com\nApproval ID: ${id}`;
+            const tid = approverDID.replace(/^did:t3n:/, '').replace(/^did:t3:user:/, '').replace(/^simulatedFallbackDid:\w+:/, '').toLowerCase();
+            const standardMessage = `T3 Agent Authorization Grant\nAgent DID: did:t3:agent:department-of-incidents\nContract: z:${tid}:incident-contracts\nFunction: ${scope}\nOutbound Hosts: api.github.com\nApproval ID: ${id}`;
             const fallbackMessage = `T3 Agent Authorization Grant\nAgent DID: did:t3:agent:department-of-incidents\nContract: z:system:incident-contracts\nFunction: incident-${id}\nApproval ID: ${id}`;
 
             let signature = '';
@@ -926,12 +954,12 @@
                     const accounts = await window.ethereum.request({ method: 'eth_accounts' });
                     if (accounts && accounts.length > 0) {
                         const mmAddr = accounts[0].toLowerCase().replace('0x', '');
-                        const approverAddr = approverDID.replace(/^did:t3n:/, '').replace(/^did:t3:user:/, '').toLowerCase();
+                        const approverAddr = approverDID.replace(/^did:t3n:/, '').replace(/^did:t3:user:/, '').replace(/^simulatedFallbackDid:\w+:/, '').toLowerCase();
                         if (mmAddr === approverAddr) {
                             appendTerminalLog("MetaMask address matches approverDID — requesting MetaMask signature...", "info");
                             const provider = new ethers.BrowserProvider(window.ethereum);
                             const signer = await provider.getSigner();
-                            signature = await signer.signMessage(fallbackMessage);
+                            signature = await signer.signMessage(standardMessage);
                             appendTerminalLog(`Signed via MetaMask. Bytes: ${signature.length}`, "success");
                         } else {
                             appendTerminalLog(`MetaMask address (${mmAddr.substring(0,8)}...) does not match approverDID. Using registered local key instead.`, "info");
@@ -947,14 +975,14 @@
                 try {
                     const wallet = new ethers.Wallet(fallbackPrivateKey);
                     const walletAddr = wallet.address.toLowerCase().replace('0x', '');
-                    const approverAddr = approverDID.replace(/^did:t3n:/, '').replace(/^did:t3:user:/, '').toLowerCase();
+                    const approverAddr = approverDID.replace(/^did:t3n:/, '').replace(/^did:t3:user:/, '').replace(/^simulatedFallbackDid:\w+:/, '').toLowerCase();
                     
                     if (walletAddr !== approverAddr) {
                         appendTerminalLog(`⚠ WARNING: Local key address (${walletAddr.substring(0,8)}...) does not match approverDID (${approverAddr.substring(0,8)}...). Signature will fail. Please connect the correct wallet.`, "error");
                     }
                     
                     appendTerminalLog(`Signing locally with registered key: ${wallet.address}`, "info");
-                    signature = await wallet.signMessage(fallbackMessage);
+                    signature = await wallet.signMessage(standardMessage);
                     appendTerminalLog(`Signed locally. Signature: ${signature.substring(0, 20)}...`, "success");
                 } catch (err) {
                     appendTerminalLog(`Local signing failed: ${err.message}`, "error");

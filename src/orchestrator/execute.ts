@@ -1,6 +1,6 @@
-import { T3Session, ApprovalResult } from "../sdk-wrapper/t3-agent";
-import { agent } from "./agent-core";
+import { T3Session, ApprovalResult, executeUnder } from "./agent-core";
 import { mergePR } from "./github";
+import { writeAudit } from "./audit";
 
 export interface MergeResult {
     status: string;
@@ -15,12 +15,10 @@ export async function executeMerge(
 ): Promise<MergeResult> {
     console.log(`[Incident Guard] Securely executing merge for PR: ${prUrl} using delegation credential...`);
     
-    // T3 injects the approver's GitHub token inside TEE
-    // agent code only sees the structured result
     const repo = process.env.GITHUB_REPO || "Starlight-Local/department-of-incidents";
     const prNumber = parseInt(prUrl.split("/").pop() || "42", 10);
 
-    const mergeResult = await agent.executeUnder({
+    const mergeResult = await executeUnder({
         session,
         delegateDID: approvalResult.approverDID,
         credential: approvalResult.credential,
@@ -35,7 +33,7 @@ export async function executeMerge(
         },
     });
     
-    await agent.audit.write({
+    await writeAudit({
         action: "MERGE_EXECUTED",
         actor: approvalResult.approverDID,
         prUrl,
