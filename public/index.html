@@ -315,39 +315,35 @@
             telemetryChart.update('none');
         }
 
-        // Retrieve or generate a persistent local developer private key (no hardcoded keys in source)
+        // Retrieve or generate a persistent local developer private key
         let fallbackPrivateKey = localStorage.getItem("t3_developer_private_key");
         if (!fallbackPrivateKey || fallbackPrivateKey.length !== 66) {
             fallbackPrivateKey = ethers.Wallet.createRandom().privateKey;
             localStorage.setItem("t3_developer_private_key", fallbackPrivateKey);
         }
+
+        // Sync with the server's configured signing key (T3N_API_KEY in .env) so that
+        // the browser's fallback wallet always matches the approverDID on pending approvals.
+        // We do this synchronously via XMLHttpRequest so the correct key is in place BEFORE
+        // AliceDID is declared — avoids the async-IIFE ordering bug.
+        try {
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", "/api/dev-wallet", false); // synchronous
+            xhr.send();
+            if (xhr.status === 200) {
+                const devData = JSON.parse(xhr.responseText);
+                if (devData.privateKey && devData.privateKey.length === 66 && devData.privateKey !== fallbackPrivateKey) {
+                    fallbackPrivateKey = devData.privateKey;
+                    localStorage.setItem("t3_developer_private_key", fallbackPrivateKey);
+                    console.log("[Dashboard] Synced signing key from server /api/dev-wallet.");
+                }
+            }
+        } catch (e) {
+            console.warn("[Dashboard] dev-wallet sync failed:", e.message);
+        }
+
         let fallbackWallet = new ethers.Wallet(fallbackPrivateKey);
         let fallbackAddress = fallbackWallet.address.toLowerCase();
-
-        // Sync with server's active signing key (set by T3N_API_KEY / T3_PRIVATE_KEY in .env).
-        // This guarantees that approval signatures match the approverDID even after test runners
-        // (e.g. verify-triggers.js) have registered a different wallet with the server.
-        (async () => {
-            try {
-                const devRes = await fetch('/api/dev-wallet');
-                const devData = await devRes.json();
-                if (devData.privateKey && devData.privateKey.length === 66) {
-                    // Server has a real key configured — sync the browser to use it
-                    if (localStorage.getItem("t3_developer_private_key") !== devData.privateKey) {
-                        localStorage.setItem("t3_developer_private_key", devData.privateKey);
-                        console.log("[Dashboard] Synced signing key from server dev-wallet endpoint.");
-                    }
-                    fallbackPrivateKey = devData.privateKey;
-                    fallbackWallet = new ethers.Wallet(fallbackPrivateKey);
-                    fallbackAddress = fallbackWallet.address.toLowerCase();
-                    AliceDID = devData.did;
-                    registerDID(AliceDID);
-                    updateWalletBtn(fallbackAddress);
-                }
-            } catch (e) {
-                console.warn("[Dashboard] Could not sync dev-wallet (server may not expose key):", e.message);
-            }
-        })();
 
         // Mocks for DIDs matches the dynamic fallback key
         let AliceDID = "did:t3n:" + fallbackAddress.replace("0x", "");
