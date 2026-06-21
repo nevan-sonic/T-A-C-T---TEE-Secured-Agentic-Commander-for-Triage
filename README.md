@@ -135,7 +135,7 @@ npm install
 Configure your `.env` file at the root. A pre-populated example is provided below:
 ```ini
 T3N_API_KEY=your_t3n_private_key
-T3N_TENANT_DID=did:t3:tenant:c8eb415587d29e3155bb615149156b0ce5f2ecc5
+T3N_TENANT_DID=did:t3:tenant:your_t3n_tenant_did
 GROQ_API_KEY=your_groq_api_key
 GITHUB_REPO=nevan-sonic/T-A-C-T---TEE-Secured-Agentic-Commander-for-Triage
 GITHUB_TOKEN=your_github_personal_access_token

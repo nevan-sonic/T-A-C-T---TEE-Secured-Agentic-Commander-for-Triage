@@ -49,7 +49,7 @@ async function signAndApprovePending() {
     for (const app of approvals) {
         console.log(`[Test Runner] Signing approval ID: ${app.id} for approver ${app.approverDID} (scope: ${app.scope})...`);
         const matches = app.approverDID.match(/did:t3n:([0-9a-fA-F]+)/) || app.approverDID.match(/did:t3:user:([0-9a-fA-F]+)/) || app.approverDID.match(/did:t3:user:(\w+)/);
-        const tid = matches ? matches[1].toLowerCase() : "c8eb415587d29e3155bb615149156b0ce5f2ecc5";
+        const tid = matches ? matches[1].toLowerCase() : "0000000000000000000000000000000000000000";
         
         // Construct the standard message
         const message = `T3 Agent Authorization Grant\nAgent DID: did:t3:agent:department-of-incidents\nContract: z:${tid}:incident-contracts\nFunction: ${app.scope}\nOutbound Hosts: api.github.com\nApproval ID: ${app.id}`;

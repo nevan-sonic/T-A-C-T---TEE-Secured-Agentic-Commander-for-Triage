@@ -28,7 +28,7 @@ async function autoApprove() {
         console.log(`Scope: ${scope}`);
         
         const matches = approverDID.match(/did:t3n:([0-9a-fA-F]+)/) || approverDID.match(/did:t3:user:([0-9a-fA-F]+)/) || approverDID.match(/did:t3:user:(\w+)/);
-        const expectedAddressHex = matches ? matches[1] : 'c8eb415587d29e3155bb615149156b0ce5f2ecc5';
+        const expectedAddressHex = matches ? matches[1] : '0000000000000000000000000000000000000000';
         const tid = expectedAddressHex.toLowerCase();
         
         const message = `T3 Agent Authorization Grant\nAgent DID: did:t3:agent:department-of-incidents\nContract: z:${tid}:incident-contracts\nFunction: ${scope}\nOutbound Hosts: api.github.com\nApproval ID: ${id}`;
