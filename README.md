@@ -48,7 +48,12 @@
 
 Click the thumbnail above to watch the demo.
 
+---
+## Bug Bounty Submission
 
+See [BUG_REPORT.md](./BUG_REPORT.md) for the full list of bugs, broken links, and documentation gaps found in the Terminal 3 SDK, developer docs, and marketing site, submitted as part of the Terminal 3 Bug Discovery Bounty.
+
+---
 ## ⚡ What Is T.A.C.T.?
 
 **T.A.C.T.** is an autonomous incident response system that eliminates the gap between *alert fires* and *production healed*. When an outage hits, T.A.C.T. automatically:
