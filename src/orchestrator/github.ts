@@ -79,10 +79,20 @@ module.exports = { dbPool, poolConfig };
 `;
         fs.writeFileSync(appServiceFilePath, defaultAppService);
         
+        // Copy package.json from root to workspace
+        const rootPackageJson = path.join(process.cwd(), "package.json");
+        if (fs.existsSync(rootPackageJson)) {
+            fs.copyFileSync(rootPackageJson, path.join(workspaceDir, "package.json"));
+        }
+        
         runGitCmd("git add app_service.js");
-        runGitCmd("git commit -m \"initial commit: setup gateway service code\"");
+        if (fs.existsSync(path.join(workspaceDir, "package.json"))) {
+            runGitCmd("git add package.json");
+        }
+        
+        runGitCmd("git commit -m \"initial commit: setup gateway service code and package configuration\"");
         runGitCmd("git branch -M main");
-        console.log("[Git Engine] Initialized repository, renamed default branch to 'main', and committed app_service.js");
+        console.log("[Git Engine] Initialized repository, renamed default branch to 'main', and committed files.");
     } else {
         console.log("[Git Engine] Git repository already exists in workspace.");
         try {
@@ -90,6 +100,19 @@ module.exports = { dbPool, poolConfig };
             runGitCmd("git branch -M main");
         } catch (e) {
             // Ignore if no commits are present yet or already main
+        }
+        
+        // Sync package.json from parent if not present in workspace
+        const workspacePackageJson = path.join(workspaceDir, "package.json");
+        if (!fs.existsSync(workspacePackageJson)) {
+            const rootPackageJson = path.join(process.cwd(), "package.json");
+            if (fs.existsSync(rootPackageJson)) {
+                fs.copyFileSync(rootPackageJson, workspacePackageJson);
+                try {
+                    runGitCmd("git add package.json");
+                    runGitCmd("git commit -m \"chore: track package.json on main\"");
+                } catch (e) {}
+            }
         }
         
         // Stage and commit app_service.js on main if it's untracked or modified
@@ -106,8 +129,14 @@ module.exports = { dbPool, poolConfig };
     }
 }
 
-export async function createPR(patchContent: string, secureContext: any): Promise<PRDetails> {
-    console.log("[Git Engine] Creating branch and applying config fix...");
+export async function createPR(
+    patchContent: string,
+    secureContext: any,
+    targetPath: string = "app_service.js",
+    commitMessage: string = "fix(db): increase database pool size to 50",
+    customBranchName?: string
+): Promise<PRDetails> {
+    console.log(`[Git Engine] Creating branch and applying config fix to ${targetPath}...`);
     
     // Ensure we are on main and clean
     runGitCmd("git checkout -f main");
@@ -131,7 +160,7 @@ export async function createPR(patchContent: string, secureContext: any): Promis
     }
     
     // Create new branch
-    const branchName = "fix/db-pool-exhaustion-" + Math.random().toString(36).substring(2, 6);
+    const branchName = customBranchName || ("fix/" + targetPath.replace(/[^a-zA-Z0-9]/g, "-") + "-" + Math.random().toString(36).substring(2, 6));
     const safeBranch = sanitizeShellArg(branchName);
     runGitCmd(`git checkout -b ${safeBranch}`);
     
@@ -144,10 +173,11 @@ export async function createPR(patchContent: string, secureContext: any): Promis
             cleanCode = filtered.join("\n").trim();
         }
 
-        // Validate cleanCode has Pool and max, otherwise use a fallback
-        if (!cleanCode || !cleanCode.includes("Pool") || !cleanCode.includes("max")) {
-            console.warn("[Git Engine] Proposing patch appears invalid. Falling back to default app_service.js fix.");
-            cleanCode = `// Production Gateway Database Connection Pool Init
+        // Validate cleanCode has Pool and max only if targetPath is app_service.js
+        if (targetPath === "app_service.js") {
+            if (!cleanCode || !cleanCode.includes("Pool") || !cleanCode.includes("max")) {
+                console.warn("[Git Engine] Proposing patch appears invalid. Falling back to default app_service.js fix.");
+                cleanCode = `// Production Gateway Database Connection Pool Init
 const { Pool } = require("pg");
 
 const poolConfig = {
@@ -164,17 +194,20 @@ const dbPool = new Pool(poolConfig);
 
 module.exports = { dbPool, poolConfig };
 `;
+            }
         }
 
-        fs.writeFileSync(appServiceFilePath, cleanCode);
-        console.log("[Git Engine] app_service.js updated successfully with code patch.");
+        const targetFilePath = path.join(workspaceDir, targetPath);
+        fs.mkdirSync(path.dirname(targetFilePath), { recursive: true });
+        fs.writeFileSync(targetFilePath, cleanCode);
+        console.log(`[Git Engine] ${targetPath} updated successfully with code patch.`);
     } catch (e: any) {
         console.error(`[Git Engine Error] Critical error applying code patch: ${e.message}`);
     }
 
     // Commit change
-    runGitCmd("git add app_service.js");
-    runGitCmd(`git commit --allow-empty -m "fix(db): increase database pool size to 50"`);
+    runGitCmd(`git add "${targetPath}"`);
+    runGitCmd(`git commit --allow-empty -m "${commitMessage.replace(/"/g, '\\"')}"`);
     
     console.log(`[Git Engine] Changes committed locally to branch: ${branchName}`);
 
@@ -210,7 +243,7 @@ module.exports = { dbPool, poolConfig };
             const prResponse = await octokit.rest.pulls.create({
                 owner,
                 repo: repoName,
-                title: `fix(db): increase database pool size to 50`,
+                title: commitMessage,
                 head: branchName,
                 base: "main",
                 body: "Automatically created by TEE-secured Department of Incidents Commander.",

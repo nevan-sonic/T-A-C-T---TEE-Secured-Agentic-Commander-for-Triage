@@ -55,7 +55,13 @@ function checkSyntax(patch: string): boolean {
         new Function(patch);
         return true;
     } catch {
-        return false;
+        // Fallback for JSON patches (e.g. package.json updates)
+        try {
+            JSON.parse(patch);
+            return true;
+        } catch {
+            return false;
+        }
     }
 }
 
