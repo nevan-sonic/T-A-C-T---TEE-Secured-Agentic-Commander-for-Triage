@@ -1,6 +1,6 @@
-import { T3Session, ApprovalResult } from "../sdk-wrapper/t3-agent";
-import { agent } from "./agent-core";
+import { T3Session, ApprovalResult, executeUnder } from "./agent-core";
 import { mergePR } from "./github";
+import { writeAudit } from "./audit";
 
 export interface MergeResult {
     status: string;
@@ -15,25 +15,25 @@ export async function executeMerge(
 ): Promise<MergeResult> {
     console.log(`[Incident Guard] Securely executing merge for PR: ${prUrl} using delegation credential...`);
     
-    // T3 injects the approver's GitHub token inside TEE
-    // agent code only sees the structured result
-    const mergeResult = await agent.executeUnder({
+    const repo = process.env.GITHUB_REPO || "Starlight-Local/department-of-incidents";
+    const prNumber = parseInt(prUrl.split("/").pop() || "42", 10);
+
+    const mergeResult = await executeUnder({
         session,
         delegateDID: approvalResult.approverDID,
         credential: approvalResult.credential,
+        functionName: "merge-fix",
+        input: {
+            repo,
+            pr_number: prNumber,
+            branch: branchName
+        },
         action: async (secureContext) => {
-            // Retrieve token inside enclave (just logging confirmation in simulator)
-            const token = secureContext.getSecret("github_token");
-            if (!token) {
-                console.log("[T3 Enclave] Warning: No github_token found in T3 Secrets Vault. Using default.");
-            } else {
-                console.log("[T3 Enclave] github_token successfully injected into execution context.");
-            }
             return mergePR(branchName, secureContext);
         },
     });
     
-    await agent.audit.write({
+    await writeAudit({
         action: "MERGE_EXECUTED",
         actor: approvalResult.approverDID,
         prUrl,
