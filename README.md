@@ -428,26 +428,37 @@ Score Calculation
 ```
 tact/
 ├── server.js                  # Entry point · Express server · boot sequence
-├── app_service.js             # Live mock service (patched during incidents)
+├── app_service.js             # Live mock service (patched during SRE incidents)
 │
 ├── src/
-│   ├── agent.ts               # Core agent · TEE handshake · Groq calls
-│   ├── enclave-simulator.ts   # Intel TDX simulator · KV store · audit ledger
-│   ├── audit-ledger.ts        # Immutable append-only ledger
-│   ├── cve-handler.ts         # GitHub CVE / Dependabot webhook handler
-│   ├── runbook-handler.ts     # PagerDuty / Opsgenie runbook handler
-│   └── cost-handler.ts        # AWS CloudWatch cost anomaly handler
+│   ├── sdk-wrapper/
+│   │   └── enclave-sim.ts     # Intel TDX simulator (seeded KV store, TEE logic)
+│   │
+│   └── orchestrator/
+│       ├── agent-core.ts      # Core orchestrator control loop & state manager
+│       ├── approvals.ts       # Sequential approval collector
+│       ├── audit.ts           # Append-only public audit ledger manager
+│       ├── canary.ts          # Canary health checker
+│       ├── cost-handler.ts    # AWS cost anomaly remediator
+│       ├── cve-handler.ts     # GitHub CVE & Dependabot auto-patch handler
+│       ├── execute.ts         # TEE-scoped PR merger
+│       ├── github.ts          # Git engine for local/remote branch operations
+│       ├── llm.ts             # Groq Llama-3 client & secure prompts
+│       ├── notify.ts          # Slack notification delivery helper
+│       ├── rollback.ts        # TEE-scoped revert engine
+│       ├── runbook-handler.ts # PagerDuty runbook execution steps runner
+│       ├── severity.ts        # Threat severity classifier
+│       └── validate.ts        # Context-aware patch safety validator
 │
-├── rust-contract/
-│   └── src/
-│       └── lib.rs             # WASM contract · 4 TEE functions
+├── src/contract/
+│   └── lib.rs                 # WASM contract source (4 TEE target functions)
 │
-├── scripts/
-│   └── register-contract.js  # Terminal 3 testnet contract deployment
+├── scripts/                   # Integration scripts (balance check, manual triggers)
+│   └── register-contract.js   # WASM contract publisher script
 │
-├── workspace/                 # Git workspace for PR operations
-├── dist/                      # Compiled TypeScript
-└── public/                    # React login + dashboard assets
+├── workspace/                 # Git runtime workspace for PR operations
+├── dist/                      # Compiled TypeScript outputs served at runtime
+└── public/                    # Dashboard UI & React login assets
 ```
 
 ---
@@ -495,11 +506,11 @@ AWS_REGION=us-east-1
 
 ```bash
 # Build Rust WASM contract
-cd rust-contract
+cd src/contract
 cargo build --target wasm32-wasip2 --release
 
 # Compile TypeScript
-npm run build
+npm run compile
 
 # Start T.A.C.T.
 node server.js
