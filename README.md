@@ -72,28 +72,28 @@ Every secure action in T.A.C.T. translates directly to a Terminal 3 ADK primitiv
 
 ### 1. Enclave Handshake
 Establishes session keys between the client orchestrator and the TEE hardware sandbox.
-* **SDK Wrapper:** [src/sdk-wrapper/t3-agent.ts#L96](file:///c:/Users/Nevan/Desktop/Starlight/src/sdk-wrapper/t3-agent.ts#L96) (`handshake()`)
-* **Agent Core:** [src/orchestrator/agent-core.ts#L94](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/agent-core.ts#L94) (`const session = await agent.handshake();`)
+* **SDK Wrapper:** [src/sdk-wrapper/t3-agent.ts#L81](file:///c:/Users/Nevan/Desktop/Starlight/src/sdk-wrapper/t3-agent.ts#L81) (`handshake()`)
+* **Agent Core:** [src/orchestrator/agent-core.ts#L77](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/agent-core.ts#L77) (`const session = await agent.handshake();`)
 
-### 2. Session Authentication
-Authenticates the active session keys.
-* **SDK Wrapper:** [src/sdk-wrapper/t3-agent.ts#L110](file:///c:/Users/Nevan/Desktop/Starlight/src/sdk-wrapper/t3-agent.ts#L110) (`authenticate()`)
-* **Agent Core:** [src/orchestrator/agent-core.ts#L99](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/agent-core.ts#L99) (`await agent.authenticate({ session })`)
+### 2. User Authentication & Identity Scope Routing
+Executes operations under the identity of a delegated user DID (e.g. read access).
+* **SDK Wrapper:** [src/sdk-wrapper/t3-agent.ts#L127](file:///c:/Users/Nevan/Desktop/Starlight/src/sdk-wrapper/t3-agent.ts#L127) (`authenticate()`)
+* **Agent Core:** [src/orchestrator/agent-core.ts#L82](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/agent-core.ts#L82) (`agent.authenticate({ delegateDID, scope: "repo:read", ... })`)
 
-### 3. Guest WASM Contract Publication
-Registers the compiled guest WASM component under the tenant's secure z-namespace.
-* **SDK Wrapper:** [src/sdk-wrapper/t3-agent.ts#L32](file:///c:/Users/Nevan/Desktop/Starlight/src/sdk-wrapper/t3-agent.ts#L32) (`client.contracts.publish()`)
-* **Agent Core:** [src/orchestrator/agent-core.ts#L20](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/agent-core.ts#L20) (`await client.contracts.publish({ script_name, script_version, wasm_binary_path, functions })`)
+### 3. Requesting Cryptographic Delegation Challenges
+Requests co-signature approvals from code owners/engineers. EIP-191 verification is handled strictly inside the enclave boundaries.
+* **SDK Wrapper:** [src/sdk-wrapper/t3-agent.ts#L149](file:///c:/Users/Nevan/Desktop/Starlight/src/sdk-wrapper/t3-agent.ts#L149) (`requestDelegation()`)
+* **Agent Core:** [src/orchestrator/approvals.ts#L12](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/approvals.ts#L12) (`agent.requestDelegation({ delegateDID, scope: "repo:merge", ... })`)
 
-### 4. Secure Enclave Execution (`executeAndDecode`)
-Invokes exported functions (`investigate-logs`, `create-fix-pr`, `merge-fix`, `revert-commit`) inside the isolated WASM guest contract boundary.
-* **SDK Wrapper:** [src/sdk-wrapper/t3-agent.ts#L115](file:///c:/Users/Nevan/Desktop/Starlight/src/sdk-wrapper/t3-agent.ts#L115) (`executeAndDecode()`)
-* **Agent Core:** [src/orchestrator/agent-core.ts#L105](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/agent-core.ts#L105) (`await agent.executeAndDecode({ script_name, script_version, function_name, input })`)
+### 4. Secure Enclave Isolation (`executeUnder`)
+Injects credentials (like `github_token`) directly from the enclave's secure z-namespace vaults and runs file edits, merges, and rollbacks inside the isolated boundary.
+* **SDK Wrapper:** [src/sdk-wrapper/t3-agent.ts#L193](file:///c:/Users/Nevan/Desktop/Starlight/src/sdk-wrapper/t3-agent.ts#L193) (`executeUnder()`)
+* **Agent Core:** [src/orchestrator/execute.ts#L17](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/execute.ts#L17) (`agent.executeUnder({ delegateDID, scope: "repo:merge", ... })`)
 
-### 5. Tamper-Proof Audit Ledger (`client.maps`)
-Permanently appends immutable transaction steps and audit logs to the T3 `client.maps` store structure under the `z:<tid>:audit-ledger` KV namespace.
-* **SDK Wrapper:** [src/sdk-wrapper/t3-agent.ts#L57](file:///c:/Users/Nevan/Desktop/Starlight/src/sdk-wrapper/t3-agent.ts#L57) (`client.maps.set()`)
-* **Agent Core:** [src/orchestrator/agent-core.ts#L113](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/agent-core.ts#L113) (`await agent.audit.write({ action, actor, incidentId })`)
+### 5. Tamper-Proof Audit Ledger
+Permanently appends immutable transaction steps to T3's secure audit memory.
+* **SDK Wrapper:** [src/sdk-wrapper/t3-agent.ts#L66](file:///c:/Users/Nevan/Desktop/Starlight/src/sdk-wrapper/t3-agent.ts#L66) (`agent.audit.write()`)
+* **Agent Core:** [src/orchestrator/agent-core.ts#L93](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/agent-core.ts#L93) (`await agent.audit.write({ action: "LOG_READ", ... })`)
 
 <p align="center">
   <img src="./public/divider.svg" alt="Divider" width="100%">
@@ -106,8 +106,14 @@ Permanently appends immutable transaction steps and audit logs to the T3 `client
 * [src/sdk-wrapper/enclave-sim.ts](file:///c:/Users/Nevan/Desktop/Starlight/src/sdk-wrapper/enclave-sim.ts) — Simulated Intel TDX enclave running ledger memory, EIP-191 signatures, and z-namespace secret maps.
 * [src/orchestrator/agent-core.ts](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/agent-core.ts) — SRE event orchestrator driving alerts, AI diagnostics, delegation, and rollback loops.
 * [src/orchestrator/github.ts](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/github.ts) — Real Git / GitHub API integrations (commits, pushes, pull requests, merges, and hard resets).
+* [src/orchestrator/cve-handler.ts](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/cve-handler.ts) — Gated Dependabot and manual security advisory auto-patching workflow.
+* [src/orchestrator/runbook-handler.ts](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/runbook-handler.ts) — Incident-specific SRE runbook automation with EIP-191 checkpoints.
+* [src/orchestrator/cost-handler.ts](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/cost-handler.ts) — AWS Cost Anomaly detection and rightsizing auto-remediation workflow.
+* [src/orchestrator/validate.ts](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/validate.ts) — Syntax and safety patch validator (protects against malicious code patterns).
+* [src/orchestrator/canary.ts](file:///c:/Users/Nevan/Desktop/Starlight/src/orchestrator/canary.ts) — Data-driven canary telemetry check and auto-rollback decision.
 * [server.js](file:///c:/Users/Nevan/Desktop/Starlight/server.js) — Express REST controller serving APIs for webhook alert dispatching, ledger audits, and approval signatures.
 * [public/](file:///c:/Users/Nevan/Desktop/Starlight/public/) — Glassmorphic dashboard control center.
+
 
 <p align="center">
   <img src="./public/divider.svg" alt="Divider" width="100%">
@@ -223,3 +229,25 @@ Hook standard Datadog monitor notifications. The router extracts the service nam
 2. Select any resolved or merged incident and click **Manual Rollback**.
 3. A fresh `repo:revert` delegation challenge instantly registers on the **Section 3: Approval Guard** panel.
 4. Sign the challenge. The TEE reverts the configuration state and pushes it to GitHub, keeping your repo synchronized.
+
+### Test Case 4: GitHub CVE Webhook & Auto-Patch (New Feature)
+1. In the **Trigger Webhook Incidents** section, click the **Trigger GitHub CVE Webhook** button.
+2. An incident is generated automatically in the background. The AI analyzes the vulnerability (e.g. `CVE-2024-29041` in `express`), proposes a package upgrade patch, and validates it.
+3. The system creates a security branch and PR in your remote repository.
+4. Sign the authorization challenge in MetaMask. The enclave verifies the signature, executes a WASM guest enclave call (`merge-fix`), and merges the PR.
+5. Telemetry canary tests run in the background. The incident resolves safely.
+
+### Test Case 5: SRE Runbook Gated Execution (New Feature)
+1. In the dashboard, click **Trigger PagerDuty Alert**.
+2. T.A.C.T. automatically parses the incoming alert and fetches the corresponding 5-step diagnostic/remediation runbook.
+3. The AI executes diagnostic steps (checking logs, evaluating memory thresholds) autonomously.
+4. When it reaches a disruptive step (e.g. *Restart PostgreSQL replica*), execution is gated. A MetaMask sign request is presented in the dashboard under the on-call engineer's DID.
+5. Click **Confirm & Sign**. Once validated, the action runs inside the TEE enclave simulator and the final resolution is posted to the ledger.
+
+### Test Case 6: AWS Cost Anomaly Detection & Rightsizing (New Feature)
+1. In the dashboard, click **Trigger AWS Cost Anomaly**.
+2. A CloudWatch/SNS webhook payload is parsed by T.A.C.T. identifying daily spend anomaly (e.g. $2,847/day).
+3. The AI automatically logs into AWS APIs (using credentials securely read from the `client.maps` private z-namespace store), identifies oversized EC2/RDS culprit instances, and drafts a rightsizing remediation.
+4. Co-signing cards appear in the dashboard for both the **FinOps Lead** and **Finance Lead** due to financial impact.
+5. Sign both cards. The system executes the rightsizing command securely within the enclave boundary, saving costs.
+
