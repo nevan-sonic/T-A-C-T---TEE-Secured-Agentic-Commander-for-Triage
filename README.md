@@ -36,6 +36,19 @@
 
 ---
 
+
+
+## 🎥 Demo
+
+<p align="center">
+  <a href="https://youtu.be/BGX3M2ZWhFI">
+    <img src="https://img.youtube.com/vi/BGX3M2ZWhFI/maxresdefault.jpg" alt="Demo Video">
+  </a>
+</p>
+
+Click the thumbnail above to watch the demo.
+
+
 ## ⚡ What Is T.A.C.T.?
 
 **T.A.C.T.** is an autonomous incident response system that eliminates the gap between *alert fires* and *production healed*. When an outage hits, T.A.C.T. automatically:
