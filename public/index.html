@@ -16,7 +16,188 @@
 </head>
 <body>
     <div class="glass-bg"></div>
-    <div class="dashboard-container">
+
+    <!-- Sign-In Screen -->
+    <div id="login-screen" class="login-screen">
+        <div class="login-card">
+            <div class="login-brand">
+                <div class="logo-icon"></div>
+                <div class="login-brand-text">
+                    <h1>DEPARTMENT OF INCIDENTS</h1>
+                    <p>TEE-Secured Agentic Incident Commander</p>
+                </div>
+            </div>
+
+            <div class="login-divider">
+                <span>SECURE ACCESS GATE</span>
+            </div>
+
+            <form id="login-form" class="login-form" autocomplete="off" novalidate>
+                <div class="login-field">
+                    <label for="login-username">USERNAME</label>
+                    <input type="text" id="login-username" name="username" value="admin" placeholder="Enter operator ID" autocomplete="username">
+                </div>
+                <div class="login-field">
+                    <label for="login-password">PASSWORD</label>
+                    <input type="password" id="login-password" name="password" value="t3n-secure" placeholder="Enter access key" autocomplete="current-password">
+                </div>
+                <p id="login-error" class="login-error" hidden>Invalid credentials. Please try again.</p>
+                <button type="submit" class="action-btn login-submit">SIGN IN</button>
+            </form>
+
+            <div class="login-footer">
+                <span class="login-status-dot"></span>
+                <span>T3N TESTNET · ENCLAVE READY</span>
+            </div>
+            <p class="login-hint">Demo credentials: <code>admin</code> / <code>t3n-secure</code></p>
+        </div>
+    </div>
+
+    <!-- Landing Page -->
+    <div id="landing-page" class="landing-page" hidden>
+        <nav class="landing-nav">
+            <div class="landing-nav-brand">
+                <div class="logo-icon"></div>
+                <span>DEPARTMENT OF INCIDENTS</span>
+            </div>
+            <button type="button" class="landing-nav-cta" onclick="enterDashboard()">Get Started</button>
+        </nav>
+
+        <section class="landing-hero">
+            <div class="landing-hero-content reveal">
+                <p class="landing-eyebrow">T.A.C.T. · TERMINAL 3 NETWORK</p>
+                <h1>TEE-Secured Agentic<br><span>Incident Commander</span></h1>
+                <p class="landing-hero-desc">An AI-powered on-call engineer that detects outages, diagnoses root causes, writes fixes, and routes every action through cryptographically gated human approval.</p>
+                <button type="button" class="action-btn landing-hero-btn" onclick="enterDashboard()">Get Started</button>
+            </div>
+            <div class="landing-hero-visual">
+                <div class="scene-3d" id="scene-3d">
+                    <div class="cube-3d">
+                        <div class="cube-face front"></div>
+                        <div class="cube-face back"></div>
+                        <div class="cube-face right"></div>
+                        <div class="cube-face left"></div>
+                        <div class="cube-face top"></div>
+                        <div class="cube-face bottom"></div>
+                    </div>
+                    <div class="orbit-ring ring-1"></div>
+                    <div class="orbit-ring ring-2"></div>
+                    <div class="orbit-ring ring-3"></div>
+                    <div class="floating-node node-1"></div>
+                    <div class="floating-node node-2"></div>
+                    <div class="floating-node node-3"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="landing-section reveal">
+            <div class="landing-section-inner">
+                <span class="section-num">01</span>
+                <h2>What is T.A.C.T.?</h2>
+                <p>The <strong>TEE-Secured Agentic Commander for Triage</strong> watches your services for error spikes, CVE alerts, runbook triggers, and cost anomalies — then autonomously triages, patches, and requests your signature before merging.</p>
+                <div class="landing-stats">
+                    <div class="stat-card"><strong>4</strong><span>Incident Types</span></div>
+                    <div class="stat-card"><strong>TEE</strong><span>Isolated AI</span></div>
+                    <div class="stat-card"><strong>100%</strong><span>Audit Trail</span></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="landing-section landing-section-alt reveal">
+            <div class="landing-section-inner">
+                <span class="section-num">02</span>
+                <h2>How It Works</h2>
+                <div class="landing-steps">
+                    <div class="step-card">
+                        <div class="step-icon">📡</div>
+                        <h3>Detect</h3>
+                        <p>APM monitors, webhooks, and traffic simulators trigger incidents in real time.</p>
+                    </div>
+                    <div class="step-card">
+                        <div class="step-icon">🧠</div>
+                        <h3>Diagnose</h3>
+                        <p>AI reads logs inside a secure enclave and classifies severity with confidence scores.</p>
+                    </div>
+                    <div class="step-card">
+                        <div class="step-icon">🔧</div>
+                        <h3>Remediate</h3>
+                        <p>Generates code patches, opens PRs, executes runbooks, or rightsizes cloud resources.</p>
+                    </div>
+                    <div class="step-card">
+                        <div class="step-icon">✍️</div>
+                        <h3>Approve</h3>
+                        <p>Humans sign EIP-191 grants — without your signature, the agent cannot proceed.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="landing-section reveal">
+            <div class="landing-section-inner">
+                <span class="section-num">03</span>
+                <h2>Incident Coverage</h2>
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <span class="feature-dot p2"></span>
+                        <h3>SRE Incidents</h3>
+                        <p>Connection pool exhaustion, latency spikes, and gateway failures with auto-generated PR fixes.</p>
+                    </div>
+                    <div class="feature-card">
+                        <span class="feature-dot p1"></span>
+                        <h3>CVE / Security</h3>
+                        <p>Dependabot alerts trigger automatic dependency patching with human merge approval.</p>
+                    </div>
+                    <div class="feature-card">
+                        <span class="feature-dot purple"></span>
+                        <h3>Runbooks</h3>
+                        <p>PagerDuty alerts execute step-by-step diagnostics with gated remediation actions.</p>
+                    </div>
+                    <div class="feature-card">
+                        <span class="feature-dot green"></span>
+                        <h3>Cost Anomalies</h3>
+                        <p>CloudWatch spend spikes analyzed and rightsized with per-action authorization.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="landing-section landing-section-alt reveal">
+            <div class="landing-section-inner landing-tee">
+                <div class="tee-visual">
+                    <div class="shield-3d">
+                        <div class="shield-layer layer-1"></div>
+                        <div class="shield-layer layer-2"></div>
+                        <div class="shield-layer layer-3"></div>
+                    </div>
+                </div>
+                <div class="tee-content">
+                    <span class="section-num">04</span>
+                    <h2>Secured by Terminal 3</h2>
+                    <p>Every AI action is recorded in an immutable audit ledger. Cryptographic handshakes, TEE isolation, and DID-based delegation ensure tamper-proof incident response on the T3N testnet.</p>
+                    <ul class="tee-list">
+                        <li>Hardware TEE enclave simulation</li>
+                        <li>Immutable T3 audit ledger</li>
+                        <li>EIP-191 personal sign approvals</li>
+                        <li>Severity-gated co-signatures</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section class="landing-cta reveal">
+            <div class="landing-cta-inner">
+                <h2>Ready to Command Incidents?</h2>
+                <p>Enter the control plane to trigger mock alerts, monitor APM health, and sign delegation grants in real time.</p>
+                <button type="button" class="action-btn landing-hero-btn" onclick="enterDashboard()">Get Started →</button>
+            </div>
+        </section>
+
+        <footer class="landing-footer">
+            <p>Built for the <strong>Terminal 3 Agent Dev Kit Bounty Challenge</strong> &copy; 2026</p>
+        </footer>
+    </div>
+
+    <div id="dashboard-app" class="dashboard-container" hidden>
         
         <!-- Header -->
         <header class="navbar">
@@ -27,15 +208,18 @@
                     <p class="tagline">TEE-Secured Agentic Incident Commander | Terminal 3 Network</p>
                 </div>
             </div>
-            <div class="navbar-actions" style="display: flex; gap: 0.75rem; align-items: center;">
-                <button id="connect-wallet-btn" class="rollback-small-btn" onclick="connectWalletManual()" style="padding: 0.5rem 1rem; border-radius: 6px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.8); font-family: 'Outfit', sans-serif; transition: all 0.2s;">
-                    <span class="wallet-dot" style="display:inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 8px #ef4444;"></span>
+            <div class="navbar-actions">
+                <button id="connect-wallet-btn" class="navbar-btn wallet-btn" onclick="connectWalletManual()">
+                    <span class="wallet-dot disconnected"></span>
                     Connect Wallet
                 </button>
                 <div class="status-badge connected">
                     <span class="pulse-dot"></span>
                     T3N TESTNET ACTIVE
                 </div>
+                <button id="logout-btn" class="navbar-btn logout-btn" onclick="handleLogout()" type="button">
+                    Logout
+                </button>
             </div>
         </header>
 
@@ -201,6 +385,123 @@
 
     <!-- Script Logic -->
     <script>
+        const AUTH_KEY = "tact_authenticated";
+        const LANDING_KEY = "tact_landing_complete";
+        const DEMO_USER = "admin";
+        const DEMO_PASS = "t3n-secure";
+        let dashboardStarted = false;
+
+        function hideAllViews() {
+            document.getElementById("login-screen").hidden = true;
+            document.getElementById("landing-page").hidden = true;
+            document.getElementById("dashboard-app").hidden = true;
+            document.body.classList.remove("dashboard-active", "landing-active");
+        }
+
+        function showLogin() {
+            hideAllViews();
+            document.getElementById("login-screen").hidden = false;
+        }
+
+        function showLanding() {
+            hideAllViews();
+            document.getElementById("landing-page").hidden = false;
+            document.body.classList.add("landing-active");
+            initLandingEffects();
+            window.scrollTo(0, 0);
+        }
+
+        function showDashboard() {
+            hideAllViews();
+            document.getElementById("dashboard-app").hidden = false;
+            document.body.classList.add("dashboard-active");
+            if (!dashboardStarted) {
+                dashboardStarted = true;
+                try {
+                    startDashboard();
+                } catch (err) {
+                    console.error("[Dashboard] Failed to start:", err);
+                }
+            }
+        }
+
+        function enterDashboard() {
+            sessionStorage.setItem(LANDING_KEY, "true");
+            showDashboard();
+        }
+
+        function initLandingEffects() {
+            const scene = document.getElementById("scene-3d");
+            const heroReveal = document.querySelector(".landing-hero .reveal");
+            if (heroReveal) heroReveal.classList.add("visible");
+
+            document.querySelectorAll(".landing-page .reveal:not(.landing-hero .reveal)").forEach(el => {
+                el.classList.remove("visible");
+            });
+
+            if (!window.__landingScrollBound && scene) {
+                window.__landingScrollBound = true;
+                window.addEventListener("scroll", () => {
+                    if (document.getElementById("landing-page").hidden) return;
+                    const scrollY = window.scrollY;
+                    scene.style.transform = `translateY(${scrollY * 0.08}px) rotateX(${8 + scrollY * 0.015}deg)`;
+                }, { passive: true });
+            }
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) entry.target.classList.add("visible");
+                });
+            }, { threshold: 0.15, rootMargin: "0px 0px -40px 0px" });
+
+            document.querySelectorAll(".landing-page .reveal").forEach(el => observer.observe(el));
+        }
+
+        function handleLogin(event) {
+            event.preventDefault();
+            const username = document.getElementById("login-username").value.trim();
+            const password = document.getElementById("login-password").value.trim();
+            const errorEl = document.getElementById("login-error");
+
+            if (!username || !password) {
+                errorEl.textContent = "Please enter username and password.";
+                errorEl.hidden = false;
+                return;
+            }
+
+            sessionStorage.setItem(AUTH_KEY, "true");
+            sessionStorage.setItem("tact_username", username);
+            errorEl.hidden = true;
+            showLanding();
+        }
+
+        function handleLogout() {
+            sessionStorage.removeItem(AUTH_KEY);
+            sessionStorage.removeItem(LANDING_KEY);
+            sessionStorage.removeItem("tact_username");
+            document.getElementById("login-username").value = DEMO_USER;
+            document.getElementById("login-password").value = DEMO_PASS;
+            document.getElementById("login-error").hidden = true;
+            showLogin();
+        }
+
+        document.getElementById("login-form").addEventListener("submit", handleLogin);
+
+        function startDashboard() {
+            initChart();
+            setInterval(stepTelemetry, 1000);
+            setInterval(fetchTelemetry, 1000);
+            fetchTelemetry();
+            setInterval(() => {
+                fetchApprovals();
+                fetchLedger();
+                fetchIncidents();
+            }, 1500);
+            fetchApprovals();
+            fetchLedger();
+            initWallet();
+        }
+
         // Chart.js Telemetry Initialization
         let telemetryChart;
         const chartData = {
@@ -369,11 +670,10 @@
             if (btn) {
                 const shortAddr = address.substring(0, 6) + "..." + address.substring(address.length - 4);
                 btn.innerHTML = `
-                    <span class="wallet-dot" style="display:inline-block; width: 8px; height: 8px; border-radius: 50%; background: hsl(142, 70%, 45%); box-shadow: 0 0 8px #4ade80;"></span>
+                    <span class="wallet-dot connected"></span>
                     ${shortAddr.toUpperCase()}
                 `;
-                btn.style.borderColor = "rgba(74, 222, 128, 0.4)";
-                btn.style.color = "#4ade80";
+                btn.classList.add("connected");
             }
         }
 
@@ -399,38 +699,39 @@
             }
         }
 
-        if (window.ethereum) {
-            window.ethereum.request({ method: 'eth_accounts' }).then(accounts => {
-                if (accounts && accounts.length > 0) {
-                    const addr = accounts[0].toLowerCase();
-                    AliceDID = `did:t3n:${addr.startsWith("0x") ? addr.substring(2) : addr}`;
-                    console.log(`[Dashboard] MetaMask active account: ${AliceDID}`);
+        function initWallet() {
+            if (window.ethereum) {
+                window.ethereum.request({ method: 'eth_accounts' }).then(accounts => {
+                    if (accounts && accounts.length > 0) {
+                        const addr = accounts[0].toLowerCase();
+                        AliceDID = `did:t3n:${addr.startsWith("0x") ? addr.substring(2) : addr}`;
+                        console.log(`[Dashboard] MetaMask active account: ${AliceDID}`);
+                        registerDID(AliceDID);
+                        updateWalletBtn(addr);
+                    } else {
+                        console.log("[Dashboard] No accounts connected initially. Click 'Connect Wallet' manually.");
+                        registerDID(AliceDID);
+                    }
+                }).catch(err => {
+                    console.error("[Dashboard] MetaMask accounts query failed:", err);
                     registerDID(AliceDID);
-                    updateWalletBtn(addr);
-                } else {
-                    console.log("[Dashboard] No accounts connected initially. Click 'Connect Wallet' manually.");
-                    registerDID(AliceDID);
-                }
-            }).catch(err => {
-                console.error("[Dashboard] MetaMask accounts query failed:", err);
-                registerDID(AliceDID);
-            });
+                });
 
-            // Listen for account changes
-            window.ethereum.on('accountsChanged', (accounts) => {
-                if (accounts && accounts.length > 0) {
-                    const addr = accounts[0].toLowerCase();
-                    AliceDID = `did:t3n:${addr.startsWith("0x") ? addr.substring(2) : addr}`;
-                    console.log(`[Dashboard] MetaMask account changed to: ${AliceDID}`);
-                    registerDID(AliceDID);
-                    updateWalletBtn(addr);
-                }
-            });
-        } else {
-            AliceDID = `did:t3n:${fallbackAddress.substring(2)}`;
-            console.log(`[Dashboard] MetaMask not detected. Using local fallback DID: ${AliceDID}`);
-            registerDID(AliceDID);
-            updateWalletBtn(fallbackAddress);
+                window.ethereum.on('accountsChanged', (accounts) => {
+                    if (accounts && accounts.length > 0) {
+                        const addr = accounts[0].toLowerCase();
+                        AliceDID = `did:t3n:${addr.startsWith("0x") ? addr.substring(2) : addr}`;
+                        console.log(`[Dashboard] MetaMask account changed to: ${AliceDID}`);
+                        registerDID(AliceDID);
+                        updateWalletBtn(addr);
+                    }
+                });
+            } else {
+                AliceDID = `did:t3n:${fallbackAddress.substring(2)}`;
+                console.log(`[Dashboard] MetaMask not detected. Using local fallback DID: ${AliceDID}`);
+                registerDID(AliceDID);
+                updateWalletBtn(fallbackAddress);
+            }
         }
 
         const payloads = {
@@ -791,17 +1092,6 @@
             }
         }
 
-        // Loop checks
-        setInterval(() => {
-            fetchApprovals();
-            fetchLedger();
-            fetchIncidents();
-        }, 1500);
-
-        // First load
-        initChart();
-        setInterval(stepTelemetry, 1000);
-
         async function fetchTelemetry() {
             try {
                 const response = await fetch(`/api/telemetry-metrics?_=${Date.now()}`);
@@ -812,12 +1102,6 @@
                 console.error("Telemetry fetch error:", e);
             }
         }
-        setInterval(fetchTelemetry, 1000);
-        fetchTelemetry();
-
-        fetchApprovals();
-        fetchLedger();
-
         // ============================================================
         // New Trigger Functions
         // ============================================================
@@ -902,6 +1186,19 @@
             } catch (err) {
                 appendTerminalLog(`Cost webhook failed: ${err.message}`, 'error');
             }
+        }
+
+        // Restore session or show login after all dashboard code is ready
+        if (sessionStorage.getItem(AUTH_KEY) === "true") {
+            if (sessionStorage.getItem(LANDING_KEY) === "true") {
+                showDashboard();
+            } else {
+                showLanding();
+            }
+        } else {
+            showLogin();
+            document.getElementById("login-username").value = DEMO_USER;
+            document.getElementById("login-password").value = DEMO_PASS;
         }
     </script>
 </body>
