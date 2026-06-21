@@ -68,6 +68,10 @@ See [BUG_REPORT.md](./BUG_REPORT.md) for the full list of bugs, broken links, an
 
 Every action is written to an **immutable audit ledger** on the Terminal 3 testnet — a tamper-proof cryptographic trail of who approved what, when, and what changed.
 
+<p align="center">
+  <img src="./public/canary-heartbeat.svg" alt="Canary Telemetry Heartbeat" width="320">
+</p>
+
 ---
 
 ## 🏗️ System Architecture
@@ -221,6 +225,10 @@ Any resolved/merged incident can be manually rolled back via the dashboard. Trig
 
 > **9 steps. Zero human bottlenecks (unless severity requires it).**
 
+<p align="center">
+  <img src="./public/eip191-flow.svg" alt="Cryptographic Sign Flow" width="160">
+</p>
+
 ```
 APM Alert ──► Webhook ──► Normalize Payload ──► handleIncident()
                                                        │
@@ -303,6 +311,10 @@ The heart of the TEE — four functions that run **inside the enclave**, reading
 ---
 
 ## 🛡️ Zero-Secrets Security Model
+
+<p align="center">
+  <img src="./public/tee-shield.svg" alt="TEE Shield" width="160">
+</p>
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
