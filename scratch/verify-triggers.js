@@ -1,8 +1,9 @@
 const { ethers } = require("ethers");
+require("dotenv").config({ path: require("path").resolve(__dirname, "../.env") });
 
 const PORT = 3000;
 const BASE_URL = `http://localhost:${PORT}`;
-const PRIVATE_KEY = "0x616355559f3b9880cf878749d4d8b42f5b7c9147552ce03793de353f9d3ef00d";
+const PRIVATE_KEY = process.env.T3_PRIVATE_KEY || process.env.T3N_API_KEY || ethers.Wallet.createRandom().privateKey;
 const wallet = new ethers.Wallet(PRIVATE_KEY);
 const aliceAddress = wallet.address.toLowerCase();
 const aliceDID = `did:t3n:${aliceAddress.startsWith("0x") ? aliceAddress.substring(2) : aliceAddress}`;

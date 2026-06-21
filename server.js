@@ -83,21 +83,24 @@ try {
         console.log("[Control Plane] Cost Handler loaded.");
     } catch (e) { console.log("[Control Plane] Warning: Cost Handler not found."); }
     
+    // Generate a secure random private key on startup to avoid hardcoding secrets
+    const randomKey = ethers.Wallet.createRandom().privateKey;
+    
     // Seed credentials on startup (mimics tenant control plane execution)
     const envTid = process.env.T3N_TENANT_DID ? process.env.T3N_TENANT_DID.split(":").pop() : "bccc24bd2926d5c0065cb99f4d032fdc4f2289ec";
     enclaveSimulator.createMap(envTid, "secrets", "private", ["1001"], ["1001"]);
-    enclaveSimulator.setMapEntry(envTid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "0x518112b612270210c5a6b6354f8292979d559fe8075bb045930ddedd34749f4d");
+    enclaveSimulator.setMapEntry(envTid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "ghp_mockPersonalAccessTokenForDemoSafety123");
     // Zero-Secrets LLM Proxy: Seed Groq API key into TEE vault
     enclaveSimulator.setMapEntry(envTid, "secrets", "groq_api_key", process.env.GROQ_API_KEY || "");
     // Zero-Secrets AWS: Seed AWS credentials into TEE vault
     enclaveSimulator.setMapEntry(envTid, "secrets", "aws_access_key_id", process.env.AWS_ACCESS_KEY_ID || "AKIAIOSFODNN7EXAMPLE");
     enclaveSimulator.setMapEntry(envTid, "secrets", "aws_secret_access_key", process.env.AWS_SECRET_ACCESS_KEY || "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
 
-    const fallbackKey = process.env.T3N_API_KEY || process.env.T3_PRIVATE_KEY || "0x518112b612270210c5a6b6354f8292979d559fe8075bb045930ddedd34749f4d";
+    const fallbackKey = process.env.T3N_API_KEY || process.env.T3_PRIVATE_KEY || randomKey;
     const derivedTid = new ethers.Wallet(fallbackKey).address.toLowerCase();
     if (envTid.toLowerCase() !== derivedTid) {
         enclaveSimulator.createMap(derivedTid, "secrets", "private", ["1001"], ["1001"]);
-        enclaveSimulator.setMapEntry(derivedTid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "0x518112b612270210c5a6b6354f8292979d559fe8075bb045930ddedd34749f4d");
+        enclaveSimulator.setMapEntry(derivedTid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "ghp_mockPersonalAccessTokenForDemoSafety123");
     }
 
     // Seed default ONCALL_ENGINEER_DID on startup if different
@@ -108,7 +111,7 @@ try {
             const defaultTid = matches[1].toLowerCase();
             if (envTid.toLowerCase() !== defaultTid && derivedTid !== defaultTid) {
                 enclaveSimulator.createMap(defaultTid, "secrets", "private", ["1001"], ["1001"]);
-                enclaveSimulator.setMapEntry(defaultTid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "0x518112b612270210c5a6b6354f8292979d559fe8075bb045930ddedd34749f4d");
+                enclaveSimulator.setMapEntry(defaultTid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "ghp_mockPersonalAccessTokenForDemoSafety123");
             }
         }
     }
@@ -134,7 +137,7 @@ app.post("/api/register-active-did", (req, res) => {
         if (matches && enclaveSimulator) {
             const tid = matches[1].toLowerCase();
             enclaveSimulator.createMap(tid, "secrets", "private", ["1001"], ["1001"]);
-            enclaveSimulator.setMapEntry(tid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "0x518112b612270210c5a6b6354f8292979d559fe8075bb045930ddedd34749f4d");
+            enclaveSimulator.setMapEntry(tid, "secrets", "github_token", process.env.GITHUB_TOKEN || process.env.T3_PRIVATE_KEY || "ghp_mockPersonalAccessTokenForDemoSafety123");
         }
         
         return res.json({ status: "registered", did: activeBrowserDID });

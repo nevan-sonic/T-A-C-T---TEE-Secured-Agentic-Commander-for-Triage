@@ -1,9 +1,10 @@
 const ethers = require("ethers");
+require("dotenv").config({ path: require("path").resolve(__dirname, "../.env") });
 
 const BASE_URL = "http://localhost:3000";
-const ALICE_PRIVATE_KEY = "0x616355559f3b9880cf878749d4d8b42f5b7c9147552ce03793de353f9d3ef00d";
+const ALICE_PRIVATE_KEY = process.env.T3_PRIVATE_KEY || process.env.T3N_API_KEY || ethers.Wallet.createRandom().privateKey;
 const wallet = new ethers.Wallet(ALICE_PRIVATE_KEY);
-const ALICE_DID = `did:t3n:${wallet.address.toLowerCase().substring(2)}`;
+const ALICE_DID = `did:t3n:${wallet.address.toLowerCase().replace("0x", "")}`;
 
 console.log("Using Alice DID:", ALICE_DID);
 

@@ -315,15 +315,19 @@
             telemetryChart.update('none');
         }
 
-        // Mocks for DIDs matches the .env config
-        let AliceDID = "did:t3n:bCcC24bD2926D5C0065Cb99F4d032FDc4f2289ec"; // Matches user private key address
-        const BobDID = "did:t3:user:bob";
-        const CharlieDID = "did:t3:user:charlie";
-
-        // Derive address from the developer private key for fallback local signing
-        const fallbackPrivateKey = "0x616355559f3b9880cf878749d4d8b42f5b7c9147552ce03793de353f9d3ef00d";
+        // Retrieve or generate a persistent local developer private key (no hardcoded keys in source)
+        let fallbackPrivateKey = localStorage.getItem("t3_developer_private_key");
+        if (!fallbackPrivateKey || fallbackPrivateKey.length !== 66) {
+            fallbackPrivateKey = ethers.Wallet.createRandom().privateKey;
+            localStorage.setItem("t3_developer_private_key", fallbackPrivateKey);
+        }
         const fallbackWallet = new ethers.Wallet(fallbackPrivateKey);
         const fallbackAddress = fallbackWallet.address.toLowerCase();
+
+        // Mocks for DIDs matches the dynamic fallback key
+        let AliceDID = "did:t3n:" + fallbackAddress.replace("0x", "");
+        const BobDID = "did:t3:user:bob";
+        const CharlieDID = "did:t3:user:charlie";
 
         // Dynamically resolve AliceDID based on MetaMask or local key
         async function registerDID(did) {
@@ -606,11 +610,8 @@
             // Fallback: Generate signature locally if metamask fails or isn't present
             if (!signature) {
                 try {
-                    // Use a mock wallet constructed from Alice's private key in .env
-                    // Address: 0xbCcC24bD2926D5C0065Cb99F4d032FDc4f2289ec
-                    // Private Key: 0x518112b612270210c5a6b6354f8292979d559fe8075bb045930ddedd34749f4d
-                    const privateKey = "0x518112b612270210c5a6b6354f8292979d559fe8075bb045930ddedd34749f4d";
-                    const wallet = new ethers.Wallet(privateKey);
+                    // Use the dynamic fallback developer key (no hardcoded keys in source)
+                    const wallet = new ethers.Wallet(fallbackPrivateKey);
                     
                     appendTerminalLog(`Signing message locally for address: ${wallet.address}`, "info");
                     signature = await wallet.signMessage(message);

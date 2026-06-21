@@ -207,20 +207,28 @@ class EnclaveSimulator {
 
         // Standard EIP-191 personal_sign verification
         try {
-            // EIP-191 Structured Authorization Grant (T3N ADK compliant format)
-            const message = `T3 Agent Authorization Grant\nAgent DID: did:t3:agent:department-of-incidents\nContract: z:system:incident-contracts\nFunction: incident-${id}\nApproval ID: ${id}`;
-            const recoveredAddress = ethers.verifyMessage(message, signature);
+            // Format A: Standard Structured Authorization Grant (T3N SDK compliant format)
+            const tid = expectedAddress.toLowerCase().replace("0x", "");
+            const standardMessage = `T3 Agent Authorization Grant\nAgent DID: did:t3:agent:department-of-incidents\nContract: z:${tid}:incident-contracts\nFunction: ${approval.scope}\nOutbound Hosts: api.github.com\nApproval ID: ${id}`;
+            const recoveredAddressStandard = ethers.verifyMessage(standardMessage, signature);
 
-            console.log(`[TEE Verification] Recovered address: ${recoveredAddress}, Expected: ${expectedAddress}`);
+            // Format B: Fallback/Simplified format (as constructed by the browser dashboard)
+            const fallbackMessage = `T3 Agent Authorization Grant\nAgent DID: did:t3:agent:department-of-incidents\nContract: z:system:incident-contracts\nFunction: incident-${id}\nApproval ID: ${id}`;
+            const recoveredAddressFallback = ethers.verifyMessage(fallbackMessage, signature);
 
-            if (recoveredAddress.toLowerCase() === expectedAddress.toLowerCase()) {
+            console.log(`[TEE Verification] Recovered (Standard): ${recoveredAddressStandard}, Recovered (Fallback): ${recoveredAddressFallback}, Expected: ${expectedAddress}`);
+
+            const matchedStandard = recoveredAddressStandard.toLowerCase() === expectedAddress.toLowerCase();
+            const matchedFallback = recoveredAddressFallback.toLowerCase() === expectedAddress.toLowerCase();
+
+            if (matchedStandard || matchedFallback) {
                 approval.status = "approved";
                 approval.signature = signature;
                 approval.signedAt = Date.now();
                 console.log(`[TEE Verification] Cryptographic validation SUCCESS. Identity '${approval.approverDID}' verified.`);
                 return true;
             } else {
-                console.log(`[TEE Verification] Cryptographic validation FAILED. Recovered: ${recoveredAddress}, Expected: ${expectedAddress}`);
+                console.log(`[TEE Verification] Cryptographic validation FAILED. Recovered: Standard=${recoveredAddressStandard}, Fallback=${recoveredAddressFallback}, Expected: ${expectedAddress}`);
                 return false;
             }
         } catch (e) {

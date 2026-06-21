@@ -1,4 +1,5 @@
 const { ethers } = require("ethers");
-const pk = "0x616355559f3b9880cf878749d4d8b42f5b7c9147552ce03793de353f9d3ef00d";
+require("dotenv").config({ path: require("path").resolve(__dirname, "../.env") });
+const pk = process.env.T3_PRIVATE_KEY || process.env.T3N_API_KEY || ethers.Wallet.createRandom().privateKey;
 const wallet = new ethers.Wallet(pk);
 console.log("Derived Address:", wallet.address);

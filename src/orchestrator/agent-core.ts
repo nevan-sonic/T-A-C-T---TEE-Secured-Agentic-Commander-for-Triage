@@ -1,6 +1,7 @@
 import * as dotenv from "dotenv";
 import * as path from "path";
 import * as fs from "fs";
+import { Wallet } from "ethers";
 import { T3Agent, T3Session, ApprovalResult, SecureContext } from "../sdk-wrapper/t3-agent";
 import { classifySeverity, getSeverityConfig, Severity } from "./severity";
 import { analyzeLogs, RunbookStep, CostRemediation } from "./llm";
@@ -30,7 +31,7 @@ export interface Alert {
 // Initialize T3 Agent Client (with the credentials)
 export const agent = new T3Agent({
     agentDID: process.env.T3_AGENT_DID || "did:t3:agent:department-of-incidents",
-    privateKey: process.env.T3N_API_KEY || "0x518112b612270210c5a6b6354f8292979d559fe8075bb045930ddedd34749f4d",
+    privateKey: process.env.T3N_API_KEY || Wallet.createRandom().privateKey,
     ledgerEndpoint: process.env.T3_LEDGER_URL || "https://ledger.terminal3.io",
 });
 
