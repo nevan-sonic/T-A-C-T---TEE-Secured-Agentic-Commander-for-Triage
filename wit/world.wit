@@ -11,6 +11,7 @@ interface contracts {
     create-fix-pr: func(req: generic-input) -> result<list<u8>, string>;
     merge-fix: func(req: generic-input) -> result<list<u8>, string>;
     revert-commit: func(req: generic-input) -> result<list<u8>, string>;
+    get-secret: func(req: generic-input) -> result<list<u8>, string>;
 }
 
 world department-of-incidents {

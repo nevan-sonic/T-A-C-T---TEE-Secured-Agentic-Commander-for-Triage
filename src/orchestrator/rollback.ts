@@ -15,7 +15,7 @@ export async function executeRollback(
         session: rollbackSession,
         delegateDID: originalApproverDID,
         scope: "repo:revert",
-        metadata: { reason: "rollback", targetCommit: mergeCommitSha },
+        metadata: { reason: "rollback", targetCommit: mergeCommitSha, severity: "HIGH" },
     });
     
     console.log("[Incident Guard] Re-authentication verified. Reverting changes inside enclave...");
@@ -24,6 +24,7 @@ export async function executeRollback(
         session: rollbackSession,
         delegateDID: reauth.approverDID,
         credential: reauth.credential,
+        functionName: "revert-commit",
         action: async (ctx) => revertCommit(mergeCommitSha, ctx),
     });
     

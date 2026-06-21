@@ -21,6 +21,7 @@ export async function executeMerge(
         session,
         delegateDID: approvalResult.approverDID,
         credential: approvalResult.credential,
+        functionName: "merge-fix",
         action: async (secureContext) => {
             // Retrieve token inside enclave (just logging confirmation in simulator)
             const token = secureContext.getSecret("github_token");

@@ -167,7 +167,8 @@ export async function handleRunbookIncident(alert: RunbookAlert): Promise<void> 
                         stepDescription: step.description,
                         stepType: step.type,
                         service: alert.service,
-                        incidentId: alert.id
+                        incidentId: alert.id,
+                        severity: alert.severity
                     },
                     timeoutMs: 30 * 60 * 1000
                 });

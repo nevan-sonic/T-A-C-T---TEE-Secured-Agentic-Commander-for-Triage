@@ -168,7 +168,8 @@ export async function handleCostAnomalyIncident(alert: CostAnomalyAlert): Promis
                         action: remediation.action,
                         estimatedSaving: remediation.estimatedSaving,
                         awsCommand: remediation.awsCommand,
-                        incidentId: alert.id
+                        incidentId: alert.id,
+                        severity: mappedSeverity
                     },
                     timeoutMs: 30 * 60 * 1000
                 })
@@ -195,6 +196,7 @@ export async function handleCostAnomalyIncident(alert: CostAnomalyAlert): Promis
                 session,
                 delegateDID: primaryApproval.approverDID,
                 credential: primaryApproval.credential,
+                functionName: "investigate-logs",
                 action: async (secureContext) => {
                     // Retrieve AWS credentials from TEE vault (Zero-Secrets pattern)
                     const awsAccessKey = secureContext.getSecret("aws_access_key_id");

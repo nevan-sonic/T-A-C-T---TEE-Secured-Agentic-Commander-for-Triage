@@ -90,6 +90,15 @@ impl Guest for Component {
         
         serde_json::to_vec(&response_payload).map_err(|e| e.to_string())
     }
+
+    fn get_secret(req: GenericInput) -> Result<Vec<u8>, String> {
+        info("TEE executing function: get-secret");
+        let key_bytes = req.input.ok_or_else(|| "Missing key input".to_string())?;
+        let key = String::from_utf8(key_bytes).map_err(|e| format!("Invalid UTF-8 key: {}", e))?;
+        
+        let secret = get_secret_key(&key)?;
+        Ok(secret.into_bytes())
+    }
 }
 
 export!(Component);
