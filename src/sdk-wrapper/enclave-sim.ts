@@ -234,7 +234,28 @@ class EnclaveSimulator {
     public verifyCredential(did: string, credential: string): boolean {
         for (const app of this.approvals.values()) {
             if (app.status === "approved" && app.approverDID.toLowerCase() === did.toLowerCase() && app.signature === credential) {
-                return true;
+                // Cryptographically re-verify the signature at validation/execution time
+                const matches = did.match(/did:t3n:([0-9a-fA-F]+)/) || did.match(/did:t3:user:([0-9a-fA-F]+)/);
+                if (!matches) continue;
+                const expectedAddress = matches[1].startsWith("0x") ? matches[1] : "0x" + matches[1];
+
+                try {
+                    const tid = expectedAddress.toLowerCase().replace("0x", "");
+                    
+                    // Standard EIP-191 verification template matching approveRequest
+                    const standardMessage = `T3 Agent Authorization Grant\nAgent DID: did:t3:agent:department-of-incidents\nContract: z:${tid}:incident-contracts\nFunction: ${app.scope}\nOutbound Hosts: api.github.com\nApproval ID: ${app.id}`;
+                    const recoveredStandard = ethers.verifyMessage(standardMessage, credential);
+
+                    const fallbackMessage = `T3 Agent Authorization Grant\nAgent DID: did:t3:agent:department-of-incidents\nContract: z:system:incident-contracts\nFunction: incident-${app.id}\nApproval ID: ${app.id}`;
+                    const recoveredFallback = ethers.verifyMessage(fallbackMessage, credential);
+
+                    if (recoveredStandard.toLowerCase() === expectedAddress.toLowerCase() ||
+                        recoveredFallback.toLowerCase() === expectedAddress.toLowerCase()) {
+                        return true;
+                    }
+                } catch (e) {
+                    console.log(`[TEE Verification] Crypto verification failed inside verifyCredential: ${e}`);
+                }
             }
         }
         return false;

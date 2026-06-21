@@ -277,10 +277,13 @@ export class T3Agent {
         }
     }
 
+    private lastPrefetchFailedWithBilling = false;
+
     private async prefetchSecrets(): Promise<Map<string, string>> {
         const secrets = new Map<string, string>();
         if (!this.client || !this.scriptName) return secrets;
 
+        this.lastPrefetchFailedWithBilling = false;
         const keys = ["github_token", "groq_api_key", "aws_access_key_id", "aws_secret_access_key"];
 
         for (const key of keys) {
@@ -300,6 +303,9 @@ export class T3Agent {
                     console.log(`[T3 Agent SDK] Successfully retrieved secret '${key}' from real guest contract execution.`);
                 }
             } catch (err: any) {
+                if (isBillingOrNetworkException(err)) {
+                    this.lastPrefetchFailedWithBilling = true;
+                }
                 // This is normal if credit is insufficient or map lacks the key
                 console.log(`[T3 Agent SDK] Note: Real guest contract 'get-secret' for '${key}' failed: ${err.message}`);
                 
@@ -316,7 +322,9 @@ export class T3Agent {
                             console.log(`[T3 Agent SDK] Successfully pre-fetched secret '${key}' from real testnet KV map (control plane fallback).`);
                         }
                     } catch (cpErr: any) {
-                        // Ignore
+                        if (isBillingOrNetworkException(cpErr)) {
+                            this.lastPrefetchFailedWithBilling = true;
+                        }
                     }
                 }
             }
@@ -340,9 +348,15 @@ export class T3Agent {
                     return prefetchedSecrets.get(key)!;
                 }
 
-                // If running on real testnet, print a loud fallback warning before reading local simulator
+                // If running on real testnet, check if we should allow fallbacks
                 if (this.client) {
-                    console.log(`[T3 Enclave] ⚠ GRACEFUL FALLBACK: Secret '${key}' not found in real testnet enclave (billing limit or missing key).`);
+                    if (this.lastPrefetchFailedWithBilling) {
+                        console.log(`[T3 Enclave] ⚠ GRACEFUL FALLBACK: Secret '${key}' not found in real testnet enclave due to billing limit.`);
+                    } else {
+                        // Billing is fine, but secret is genuinely missing or unauthorized! Do NOT fall back!
+                        console.log(`[T3 Enclave] ❌ SECURITY ERROR: Secret '${key}' missing/unauthorized on testnet. Silently refusing local fallback.`);
+                        return null;
+                    }
                 }
 
                 // 2. First try reading securely from local simulator vault
@@ -563,7 +577,8 @@ export class T3Agent {
                     script_name: this.scriptName,
                     script_version: this.scriptVersion,
                     function_name: funcName,
-                    input: {}
+                    input: {},
+                    pii_did: config.delegateDID // Real delegation gating
                 });
                 console.log(`[T3 Agent SDK] Testnet execution '${funcName}' SUCCESS:`, executionResult);
                 if (executionResult && executionResult.value) {
