@@ -253,7 +253,7 @@ export async function handshakeSession(): Promise<T3Session> {
     const now = Date.now();
     let sessionId = "";
     
-    if (agentClient) {
+    if (agentClient && !isSimulationMode) {
         const sidObj = agentClient.getSessionId();
         if (sidObj && sidObj.value) {
             sessionId = sidObj.value;
