@@ -1,2 +1,4 @@
-# Upgrade express to fix CVE-2024-29041
-# npm install express@4.19.2
+{
+  "name": "express",
+  "version": "4.19.2"
+}
