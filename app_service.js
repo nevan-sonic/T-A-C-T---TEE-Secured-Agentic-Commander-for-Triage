@@ -1,4 +1,6 @@
+// Production Gateway Database Connection Pool Init
 const { Pool } = require("pg");
+
 const poolConfig = {
   host: "localhost",
   port: 5432,
@@ -6,7 +8,9 @@ const poolConfig = {
   // Database connection limit
   max: 50,
   idleTimeoutMillis: 10000,
-  connectionTimeoutMillis: 5000,
+  connectionTimeoutMillis: 2000,
 };
+
 const dbPool = new Pool(poolConfig);
+
 module.exports = { dbPool, poolConfig };
