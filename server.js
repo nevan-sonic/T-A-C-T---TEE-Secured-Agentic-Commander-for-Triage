@@ -75,6 +75,7 @@ let readAuditLedger;
 let handleCVEIncident;
 let handleRunbookIncident;
 let handleCostAnomalyIncident;
+let initPromise = null;
 
 try {
     const simModule = require("./dist/sdk-wrapper/enclave-sim");
@@ -108,7 +109,7 @@ try {
     } catch (e) { console.log("[Control Plane] Warning: Cost Handler not found."); }
     
     // Seed credentials on startup (mimics tenant control plane execution)
-    initT3n().then(() => {
+    initPromise = initT3n().then(() => {
         console.log("[Control Plane] initT3n completed successfully. Resolved DIDs:", personas);
         
         // Loop over resolved personas and seed maps/secrets in simulator
@@ -136,17 +137,6 @@ try {
     console.error("[Control Plane] Warning: Compiled modules not found. Run 'npm run compile' first to generate JS outputs.");
 }
 
-// Canonical approver DID is always derived from the configured env key — never overwritten by browser sessions
-const canonicalKey = process.env.T3N_API_KEY || process.env.T3_PRIVATE_KEY || null;
-let activeBrowserDID = "";
-if (canonicalKey) {
-    const derived = new ethers.Wallet(canonicalKey).address.toLowerCase();
-    activeBrowserDID = "did:t3n:" + derived.replace("0x", "");
-} else {
-    const derived = new ethers.Wallet(ethers.Wallet.createRandom().privateKey).address.toLowerCase();
-    activeBrowserDID = "did:t3n:" + derived.replace("0x", "");
-}
-
 function getActiveBrowserDID() {
     try {
         const coreModule = require("./dist/orchestrator/agent-core");
@@ -154,11 +144,12 @@ function getActiveBrowserDID() {
             return coreModule.personas.alice;
         }
     } catch (e) {}
-    return activeBrowserDID;
+    return "simulatedFallbackDid:alice:pending_initialization";
 }
 
 // Endpoint to expose dynamically resolved personas on the server
-app.get("/api/personas", (req, res) => {
+app.get("/api/personas", async (req, res) => {
+    if (initPromise) await initPromise;
     try {
         const coreModule = require("./dist/orchestrator/agent-core");
         res.json(coreModule.personas);
@@ -167,7 +158,8 @@ app.get("/api/personas", (req, res) => {
     }
 });
 
-app.post("/api/register-active-did", (req, res) => {
+app.post("/api/register-active-did", async (req, res) => {
+    if (initPromise) await initPromise;
     const { did } = req.body;
     if (did && (did.startsWith("did:t3n:") || did.startsWith("did:t3:") || did.startsWith("simulatedFallbackDid:"))) {
         console.log(`[Control Plane] Browser session DID noted: ${did}`);
@@ -188,18 +180,30 @@ app.post("/api/register-active-did", (req, res) => {
 // can sync its local fallback wallet — prevents "address mismatch" when test runners
 // (e.g. verify-triggers.js) register a different DID than the browser's random key.
 // This endpoint is intentionally local-only (no auth token needed in dev, never for prod).
-app.get("/api/dev-wallet", (req, res) => {
-    const privateKey = process.env.T3N_API_KEY || process.env.T3_PRIVATE_KEY || null;
-    if (!privateKey) {
-        return res.json({ privateKey: null, did: getActiveBrowserDID() });
+app.get("/api/dev-wallet", async (req, res) => {
+    // Check local/dev status first before doing anything else
+    const ip = req.ip || req.connection.remoteAddress || "unknown";
+    const isLocal = ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1" || ip.includes("127.0.0.1");
+    if (!isLocal || process.env.NODE_ENV === "production") {
+        console.warn(`[Security Gate] Rejected remote dev-wallet access from IP: ${ip}`);
+        return res.status(403).json({ error: "Access denied. Dev-wallet is dev-only and restricted to localhost." });
     }
-    const wallet = new ethers.Wallet(privateKey);
-    const did = "did:t3n:" + wallet.address.toLowerCase().replace("0x", "");
-    res.json({ privateKey, did });
+
+    if (initPromise) await initPromise;
+    const privateKey = process.env.T3N_API_KEY || process.env.T3_PRIVATE_KEY || null;
+
+    const personaKeys = {
+        alice: process.env.ALICE_PRIVATE_KEY || ethers.keccak256(ethers.toUtf8Bytes("alice")),
+        bob: process.env.BOB_PRIVATE_KEY || ethers.keccak256(ethers.toUtf8Bytes("bob")),
+        charlie: process.env.CHARLIE_PRIVATE_KEY || ethers.keccak256(ethers.toUtf8Bytes("charlie"))
+    };
+
+    res.json({ privateKey, did: getActiveBrowserDID(), personaKeys });
 });
 
 
 app.post("/api/webhook", async (req, res) => {
+    if (initPromise) await initPromise;
     let rawAlert = req.body;
     let alert = null;
     
@@ -407,7 +411,8 @@ app.post("/api/stress", (req, res) => {
 // NEW TRIGGER 1: GitHub CVE / PR Webhook Auto-Patch
 // POST /api/github-webhook — handles Dependabot, Security Advisory, and manual CVE payloads
 // ============================================================
-app.post("/api/github-webhook", (req, res) => {
+app.post("/api/github-webhook", async (req, res) => {
+    if (initPromise) await initPromise;
     if (!handleCVEIncident) {
         return res.status(500).json({ error: "CVE Handler not loaded. Run 'npm run compile' first." });
     }
@@ -483,7 +488,8 @@ app.post("/api/github-webhook", (req, res) => {
 // NEW TRIGGER 2: PagerDuty / Opsgenie Runbook Execution
 // POST /api/pagerduty-webhook — handles PagerDuty, Opsgenie, and manual runbook payloads
 // ============================================================
-app.post("/api/pagerduty-webhook", (req, res) => {
+app.post("/api/pagerduty-webhook", async (req, res) => {
+    if (initPromise) await initPromise;
     if (!handleRunbookIncident) {
         return res.status(500).json({ error: "Runbook Handler not loaded. Run 'npm run compile' first." });
     }
@@ -549,7 +555,8 @@ app.post("/api/pagerduty-webhook", (req, res) => {
 // NEW TRIGGER 3: AWS CloudWatch Cost Anomaly
 // POST /api/cloudwatch-webhook — handles SNS/CloudWatch, Cost Anomaly Detection, and manual payloads
 // ============================================================
-app.post("/api/cloudwatch-webhook", (req, res) => {
+app.post("/api/cloudwatch-webhook", async (req, res) => {
+    if (initPromise) await initPromise;
     if (!handleCostAnomalyIncident) {
         return res.status(500).json({ error: "Cost Handler not loaded. Run 'npm run compile' first." });
     }
@@ -645,6 +652,9 @@ app.get("/api/incidents/:id/runbook", (req, res) => {
 
 // Auto-triage background monitor
 setInterval(() => {
+    if (getActiveBrowserDID() === "simulatedFallbackDid:alice:pending_initialization") {
+        return;
+    }
     if (requestHistory.length < 10) return;
 
     const errorCount = requestHistory.filter(r => r.isError).length;

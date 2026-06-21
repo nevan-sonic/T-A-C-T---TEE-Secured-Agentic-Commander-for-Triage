@@ -103,6 +103,13 @@ export function isBillingOrNetworkException(err: any): boolean {
 export async function initT3n() {
     if (sdk) return;
 
+    const agentKey = process.env.T3_PRIVATE_KEY || process.env.T3N_API_KEY || Wallet.createRandom().privateKey;
+    const personaKeys = {
+        alice: process.env.ALICE_PRIVATE_KEY || ethers.keccak256(ethers.toUtf8Bytes("alice")),
+        bob: process.env.BOB_PRIVATE_KEY || ethers.keccak256(ethers.toUtf8Bytes("bob")),
+        charlie: process.env.CHARLIE_PRIVATE_KEY || ethers.keccak256(ethers.toUtf8Bytes("charlie"))
+    };
+
     try {
         console.log("[T3N SDK] Dynamically importing @terminal3/t3n-sdk...");
         sdk = await (0, eval)('import("@terminal3/t3n-sdk")');
@@ -111,7 +118,6 @@ export async function initT3n() {
         console.log("[T3N SDK] Loading WASM Component...");
         const wasmComponent = await sdk.loadWasmComponent();
 
-        const agentKey = process.env.T3_PRIVATE_KEY || process.env.T3N_API_KEY || Wallet.createRandom().privateKey;
         const agentAddr = sdk.eth_get_address(agentKey);
 
         console.log(`[T3N SDK] Handshaking core Agent Client...`);
@@ -192,12 +198,6 @@ export async function initT3n() {
         }
 
         // Handshake/authenticate lightweight clients for Alice, Bob, Charlie DIDs (Delegated Users topology)
-        const personaKeys = {
-            alice: process.env.ALICE_PRIVATE_KEY || ethers.keccak256(ethers.toUtf8Bytes("alice")),
-            bob: process.env.BOB_PRIVATE_KEY || ethers.keccak256(ethers.toUtf8Bytes("bob")),
-            charlie: process.env.CHARLIE_PRIVATE_KEY || ethers.keccak256(ethers.toUtf8Bytes("charlie"))
-        };
-
         for (const [name, key] of Object.entries(personaKeys)) {
             console.log(`[T3N SDK] Handshaking and authenticating delegate persona: ${name}...`);
             const addr = sdk.eth_get_address(key);
@@ -235,6 +235,15 @@ export async function initT3n() {
         personas.bob = "simulatedFallbackDid:bob:" + Wallet.createRandom().address.substring(2).toLowerCase();
         personas.charlie = "simulatedFallbackDid:charlie:" + Wallet.createRandom().address.substring(2).toLowerCase();
         
+        // Register the simulated DIDs with the actual addresses of the personas
+        try {
+            const { enclaveSimulator } = require("../sdk-wrapper/enclave-sim");
+            enclaveSimulator.registerDidAddress(personas.agent, sdk ? sdk.eth_get_address(agentKey) : new Wallet(agentKey).address);
+            enclaveSimulator.registerDidAddress(personas.alice, sdk ? sdk.eth_get_address(personaKeys.alice) : new Wallet(personaKeys.alice).address);
+            enclaveSimulator.registerDidAddress(personas.bob, sdk ? sdk.eth_get_address(personaKeys.bob) : new Wallet(personaKeys.bob).address);
+            enclaveSimulator.registerDidAddress(personas.charlie, sdk ? sdk.eth_get_address(personaKeys.charlie) : new Wallet(personaKeys.charlie).address);
+        } catch (e) {}
+
         console.log(`[T3N SDK] Simulation mode active. Generated fallback IDs:`, personas);
     }
 }
