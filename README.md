@@ -612,7 +612,7 @@ Built for the **Terminal 3 hackathon** — demonstrating the full T3 ADK stack:
 
 <div align="center">
 
-
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:0ea5e9,50:8b5cf6,100:ec4899&height=120&section=footer" width="100%"/>
 
 <p>
   <img src="https://img.shields.io/badge/Built%20for-Terminal%203%20Hackathon-6C47FF?style=flat-square"/>
