@@ -4,7 +4,8 @@
  * Creates a tamper-proof audit trail of exactly what was executed at each step.
  */
 
-import { activeIncidents, Alert, handshakeSession, authenticateUser, requestDelegation, personas } from "./agent-core";
+import { activeIncidents, Alert } from "./incident-store";
+import { handshakeSession, authenticateUser, requestDelegation, personas } from "./agent-core";
 import { parseRunbook, RunbookStep, RUNBOOK_PROMPT } from "./llm";
 import { notifySlack } from "./notify";
 import { Severity } from "./severity";

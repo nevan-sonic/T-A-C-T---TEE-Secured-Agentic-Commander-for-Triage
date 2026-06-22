@@ -75,6 +75,10 @@ let readAuditLedger;
 let handleCVEIncident;
 let handleRunbookIncident;
 let handleCostAnomalyIncident;
+let getAgentStatusSnapshot;
+let getStoredReport;
+let enforceScope;
+let getAgentByDid;
 let initPromise = null;
 
 try {
@@ -107,6 +111,21 @@ try {
         handleCostAnomalyIncident = costModule.handleCostAnomalyIncident;
         console.log("[Control Plane] Cost Handler loaded.");
     } catch (e) { console.log("[Control Plane] Warning: Cost Handler not found."); }
+
+    // Phase 2: Agent Identity Layer
+    try {
+        const registryModule = require("./dist/agents/agent-registry");
+        getAgentStatusSnapshot = registryModule.getAgentStatusSnapshot;
+        getAgentByDid = registryModule.getAgentByDid;
+        enforceScope = registryModule.enforceScope;
+        console.log("[Control Plane] Agent Registry loaded.");
+    } catch (e) { console.log("[Control Plane] Warning: Agent Registry not found."); }
+
+    try {
+        const reportingModule = require("./dist/agents/reporting-agent");
+        getStoredReport = reportingModule.getStoredReport;
+        console.log("[Control Plane] Reporting Agent module loaded.");
+    } catch (e) { console.log("[Control Plane] Warning: Reporting Agent module not found."); }
     
     // Seed credentials on startup (mimics tenant control plane execution)
     initPromise = initT3n().then(() => {
@@ -155,6 +174,22 @@ app.get("/api/personas", async (req, res) => {
         res.json(coreModule.personas);
     } catch (err) {
         res.json({});
+    }
+});
+
+// T3N Health Check — proves testnet authentication without exposing secrets
+app.get("/api/t3n/health", async (req, res) => {
+    try {
+        const { getT3nHealthStatus } = require("./dist/services/t3nClient");
+        const status = await getT3nHealthStatus();
+        const statusCode = status.connected ? 200 : 503;
+        res.status(statusCode).json(status);
+    } catch (err) {
+        res.status(503).json({
+            connected: false,
+            environment: process.env.T3N_ENVIRONMENT || "testnet",
+            error: "T3N health check module not available."
+        });
     }
 });
 
@@ -750,7 +785,12 @@ app.get("/api/incidents", (req, res) => {
             triggerType: value.triggerType || "unknown",
             runbookStepsCount: value.runbookSteps ? value.runbookSteps.length : null,
             costSaving: value.costSaving || null,
-            patchConfidence: value.patchConfidence || null
+            patchConfidence: value.patchConfidence || null,
+            // Phase 3: Agent Identity Layer fields
+            activeAgent: value.activeAgent || null,
+            agentHandoffLog: value.agentHandoffLog || [],
+            pipelineState: value.pipelineState || null,
+            hasReport: !!(value.report)
         });
     });
     res.json(list);
@@ -826,6 +866,72 @@ app.post("/api/incidents/:id/rollback", async (req, res) => {
         res.json({ status: "rollback_initiated", id });
     } catch (e) {
         res.status(500).json({ error: e.message });
+    }
+});
+
+// Phase 2: Agent Identity Layer Endpoints
+
+// GET /api/agents — safe public snapshot of all three agents
+app.get("/api/agents", (req, res) => {
+    if (!getAgentStatusSnapshot) {
+        return res.status(503).json({ error: "Agent Registry not loaded" });
+    }
+    res.json(getAgentStatusSnapshot());
+});
+
+// GET /api/incidents/:id/report — post-incident report
+app.get("/api/incidents/:id/report", (req, res) => {
+    const { id } = req.params;
+    if (!getStoredReport) {
+        return res.status(503).json({ error: "Reporting module not loaded" });
+    }
+    const report = getStoredReport(id);
+    if (!report) {
+        return res.status(404).json({ error: "No report found for incident " + id });
+    }
+    res.json(report);
+});
+
+// POST /api/agents/test-scope-violation — forbidden-action test endpoint
+// Demonstrates that Monitoring Agent cannot perform createPR (scope violation).
+app.post("/api/agents/test-scope-violation", async (req, res) => {
+    if (!enforceScope || !readAuditLedger) {
+        return res.status(503).json({ error: "Agent Registry or Audit module not loaded" });
+    }
+
+    const monitorDid = "did:t3:agent:tact-monitor";
+    const forbiddenAction = "createPR";
+    const testIncidentId = "test-scope-" + Date.now();
+
+    try {
+        // This should throw — monitoring agent is forbidden from createPR
+        enforceScope(monitorDid, forbiddenAction, testIncidentId);
+
+        // Should never reach here
+        res.status(500).json({ error: "Scope enforcement did not block the forbidden action." });
+    } catch (scopeError) {
+        // Read ledger to confirm SCOPE_VIOLATION entry
+        const ledger = readAuditLedger();
+        const violationEntry = ledger.find(
+            e => e.action === "SCOPE_VIOLATION" && e.incidentId === testIncidentId
+        );
+
+        // Get updated agent snapshot for trust score
+        const agentSnapshot = getAgentByDid ? getAgentByDid(monitorDid) : null;
+
+        res.json({
+            test: "monitoring-createPR-denied",
+            result: "PASS",
+            error: scopeError.message,
+            scopeViolationLedgerEntry: violationEntry ? {
+                action: violationEntry.action,
+                actor: violationEntry.actor,
+                incidentId: violationEntry.incidentId,
+                timestamp: violationEntry.timestamp,
+                details: violationEntry.details,
+            } : null,
+            monitorAgentTrustScore: agentSnapshot ? agentSnapshot.trustScore : null,
+        });
     }
 });
 

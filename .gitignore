@@ -3,11 +3,16 @@ target/
 dist/
 .env
 .env.local
+.env.*.local
 .env.production
 .env.development
 .env.staging
 .tempmediaStorage/
 *.log
+*.pem
+*.key
+secrets/
+wallets/
 TACT-Submission.zip
 updated-code-temp/
 workspace/

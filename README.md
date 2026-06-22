@@ -44,6 +44,8 @@
 </p>
 
 Click the thumbnail above to watch the demo.
+
+> **Note to Judges:** The demo video shows execution against the **real Terminal 3 testnet**. If `T3N_API_KEY` is invalid, the contract is unregistered, or testnet fuel is exhausted, the system gracefully falls back to `enclave-sim.ts` (local simulation mode). The system logs clearly indicate `[T3N SDK] ⚠ GRACEFUL FALLBACK` or `Real testnet execution ... failed` when simulation mode activates.
 <img src="./public/divider.svg" width="100%">
 
 ## Bug Bounty Submission

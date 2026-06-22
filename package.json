@@ -8,7 +8,8 @@
     "build:contract": "cargo build --target wasm32-wasip2 --release",
     "compile": "tsc",
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "verify:t3n": "npm run compile && tsx scripts/verify-t3n.ts"
   },
   "dependencies": {
     "@octokit/rest": "^20.1.1",
@@ -21,6 +22,7 @@
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/node": "^20.12.12",
+    "tsx": "^4.22.4",
     "typescript": "^5.4.5"
   }
 }

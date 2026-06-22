@@ -5,7 +5,8 @@
  * AWS credentials never leave the TEE boundary (Zero-Secrets pattern).
  */
 
-import { activeIncidents, Alert, handshakeSession, authenticateUser, requestDelegation, executeUnder, personas } from "./agent-core";
+import { activeIncidents, Alert } from "./incident-store";
+import { handshakeSession, authenticateUser, requestDelegation, executeUnder, personas } from "./agent-core";
 import { analyzeCostAnomaly, CostRemediation, COST_PROMPT } from "./llm";
 import { notifySlack } from "./notify";
 import { Severity } from "./severity";

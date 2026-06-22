@@ -19,7 +19,7 @@ function validateWorkspacePath(dir: string): string {
     return resolved;
 }
 
-const workspaceDir = validateWorkspacePath(process.env.GIT_WORKSPACE_DIR || path.join(process.cwd(), "workspace"));
+const workspaceDir = validateWorkspacePath(process.env.WORKSPACE_DIR || process.env.GIT_WORKSPACE_DIR || path.join(process.cwd(), "workspace"));
 const configFilePath = path.join(workspaceDir, "db_config.json");
 const appServiceFilePath = path.join(workspaceDir, "app_service.js");
 

@@ -168,6 +168,209 @@
             margin-top: 0.25rem;
             word-break: break-all;
         }
+        /* Agent Identity Layer Panel Styles */
+        .agent-panel-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        .agent-card {
+            background: rgba(15, 23, 42, 0.35);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .agent-card.active-agent {
+            border-color: hsl(196, 80%, 53%);
+            box-shadow: 0 0 20px rgba(14, 165, 233, 0.15);
+        }
+        .agent-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .agent-card-name {
+            font-size: 0.95rem;
+            font-weight: 800;
+            color: #fff;
+        }
+        .agent-active-badge {
+            font-size: 0.6rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            background: rgba(14, 165, 233, 0.15);
+            color: hsl(196, 80%, 53%);
+            animation: pulse-badge 2s infinite;
+        }
+        .agent-idle-badge {
+            font-size: 0.6rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.05);
+            color: rgba(255, 255, 255, 0.4);
+        }
+        @keyframes pulse-badge {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        .agent-did {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.5);
+            word-break: break-all;
+        }
+        .agent-meta-row {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+        .agent-meta-item {
+            font-size: 0.72rem;
+            color: rgba(255, 255, 255, 0.65);
+        }
+        .agent-meta-item strong {
+            color: rgba(255, 255, 255, 0.9);
+        }
+        .agent-scopes-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.3rem;
+        }
+        .agent-scope-tag {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.6rem;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 4px;
+            padding: 0.1rem 0.35rem;
+            color: rgba(255, 255, 255, 0.6);
+        }
+        .agent-actions-list {
+            font-size: 0.68rem;
+            color: rgba(255, 255, 255, 0.5);
+            max-height: 60px;
+            overflow-y: auto;
+            line-height: 1.6;
+        }
+        .agent-trust-bar {
+            height: 4px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 0.25rem;
+        }
+        .agent-trust-fill {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.5s ease;
+        }
+        /* Pipeline visualization */
+        .pipeline-viz {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.65rem;
+            margin-top: 4px;
+        }
+        .pipeline-step {
+            padding: 0.15rem 0.4rem;
+            border-radius: 3px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        .pipeline-step.completed { background: rgba(16, 185, 129, 0.15); color: hsl(150, 70%, 50%); }
+        .pipeline-step.active { background: rgba(14, 165, 233, 0.15); color: hsl(196, 80%, 53%); animation: pulse-badge 2s infinite; }
+        .pipeline-step.pending { background: rgba(255, 255, 255, 0.04); color: rgba(255, 255, 255, 0.3); }
+        .pipeline-arrow { color: rgba(255, 255, 255, 0.2); font-size: 0.6rem; }
+        /* Report viewer modal */
+        .report-section-block {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            margin-bottom: 0.75rem;
+        }
+        .report-section-block h4 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: hsl(196, 80%, 53%);
+            margin-bottom: 0.5rem;
+        }
+        .report-section-block p, .report-section-block li {
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.85);
+            line-height: 1.6;
+        }
+        .report-section-block ul { padding-left: 1.25rem; margin: 0; }
+        .report-timeline-item {
+            border-left: 2px solid rgba(14, 165, 233, 0.3);
+            padding-left: 0.75rem;
+            margin-bottom: 0.5rem;
+            font-size: 0.8rem;
+        }
+        .report-timeline-time {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem;
+            color: rgba(255, 255, 255, 0.4);
+        }
+        .view-report-btn {
+            font-size: 0.7rem;
+            font-weight: 700;
+            background: rgba(14, 165, 233, 0.15);
+            color: hsl(196, 80%, 53%);
+            border: 1px solid rgba(14, 165, 233, 0.3);
+            border-radius: 4px;
+            padding: 0.2rem 0.5rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .view-report-btn:hover { background: rgba(14, 165, 233, 0.25); }
+        /* Stress demo control */
+        .stress-demo-row {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            margin-top: 0.75rem;
+            flex-wrap: wrap;
+        }
+        .stress-demo-row input {
+            width: 70px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            padding: 0.3rem 0.5rem;
+            color: #fff;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+        }
+        .stress-demo-row label {
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.5);
+        }
+        .stress-demo-btn {
+            font-size: 0.7rem;
+            font-weight: 700;
+            background: rgba(245, 158, 11, 0.15);
+            color: hsl(35, 90%, 55%);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            border-radius: 4px;
+            padding: 0.3rem 0.6rem;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -538,6 +741,28 @@
             </div>
         </div>
 
+        <!-- Phase 3: Agent Identity Layer Panel -->
+        <div class="grid-layout" style="grid-template-columns: 1fr; margin-top: 1.5rem;">
+            <div class="card" style="padding: 1.5rem;">
+                <h2>7. AGENT IDENTITY LAYER</h2>
+                <p class="card-desc">Three-agent pipeline registry. Each agent has scoped permissions, trust scoring, and validated handoffs.</p>
+                <div id="agent-panel-grid" class="agent-panel-grid">
+                    <div class="agent-card" id="agent-card-monitor"><div style="text-align:center; padding:1rem; color:rgba(255,255,255,0.4);">Loading agents...</div></div>
+                    <div class="agent-card" id="agent-card-execution"><div style="text-align:center; padding:1rem; color:rgba(255,255,255,0.4);">Loading agents...</div></div>
+                    <div class="agent-card" id="agent-card-reporting"><div style="text-align:center; padding:1rem; color:rgba(255,255,255,0.4);">Loading agents...</div></div>
+                </div>
+                <!-- Stress demo control -->
+                <div class="stress-demo-row">
+                    <label>Connections (1-50):</label>
+                    <input type="number" id="stress-connections" value="10" min="1" max="50">
+                    <label>Hold (500-10000ms):</label>
+                    <input type="number" id="stress-hold" value="2000" min="500" max="10000">
+                    <button class="stress-demo-btn" onclick="triggerStress()">Simulate Stress</button>
+                    <button class="stress-demo-btn" style="background:rgba(239,68,68,0.15); color:hsl(0,84%,65%); border-color:rgba(239,68,68,0.3);" onclick="testScopeViolation()">Test Scope Violation</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Footer -->
         <footer class="footer">
             <p>Built for the <strong>Terminal 3 Agent Dev Kit Bounty Challenge</strong> &copy; 2026. Secured with hardware TEE enclaves.</p>
@@ -658,6 +883,9 @@
                 fetchLedger();
                 fetchIncidents();
             }, 1500);
+            // Phase 3: Agent Identity Layer polling every 3s
+            setInterval(fetchAgents, 3000);
+            fetchAgents();
             fetchApprovals();
             fetchLedger();
             fetchPersonas().then(initWallet);
@@ -1276,12 +1504,14 @@
                         const costBadge = inc.costSaving != null ? `<br><span style="font-size:0.65rem; color:#10b981;">💰 Saved $${inc.costSaving}</span>` : '';
                         const runbookBadge = inc.runbookStepsCount != null ? `<br><span style="font-size:0.65rem; color:#8b5cf6; cursor:pointer; text-decoration:underline; font-weight:600;" onclick="showRunbookStepsModal('${inc.id}')">📋 ${inc.runbookStepsCount} steps (view)</span>` : '';
 
+                        const pipelineViz = buildPipelineViz(inc);
+
                         return `
                             <tr>
                                 <td style="font-family:'JetBrains Mono', monospace; font-size:0.8rem; font-weight:700;">${inc.id}${autoBadge}${triggerBadge ? '<br>' + triggerBadge : ''}</td>
                                 <td><code>${inc.service}</code></td>
                                 <td>${severityBadge}${scoreBadge ? '<br>' + scoreBadge : ''}${costBadge}${runbookBadge}</td>
-                                <td><span class="status-badge-inline">${inc.status}</span>${resolutionTime}</td>
+                                <td><span class="status-badge-inline">${inc.status}</span>${resolutionTime}${pipelineViz}</td>
                                 <td>${prAction}</td>
                                 <td>${rollbackAction}</td>
                             </tr>
@@ -1475,6 +1705,268 @@
             }
         }
 
+        // ============================================================
+        // Phase 3: Agent Identity Layer — Dashboard Functions
+        // ============================================================
+
+        // Escape HTML to prevent XSS from untrusted LLM output
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.appendChild(document.createTextNode(String(text)));
+            return div.innerHTML;
+        }
+
+        function formatTime(ts) {
+            if (!ts || ts === 0) return 'Never';
+            return new Date(ts).toLocaleTimeString();
+        }
+
+        function timeAgo(ts) {
+            if (!ts || ts === 0) return 'Never';
+            const secs = Math.floor((Date.now() - ts) / 1000);
+            if (secs < 5) return 'Just now';
+            if (secs < 60) return secs + 's ago';
+            if (secs < 3600) return Math.floor(secs / 60) + 'm ago';
+            return Math.floor(secs / 3600) + 'h ago';
+        }
+
+        // Track which agents are currently active (handling incidents)
+        let agentActiveState = {};
+
+        async function fetchAgents() {
+            try {
+                const res = await fetch(`/api/agents?_=${Date.now()}`);
+                if (!res.ok) return; // silent fail
+                const agents = await res.json();
+                renderAgentCards(agents);
+            } catch (e) {
+                // Silent/retry-safe: do not erase existing UI state
+            }
+        }
+
+        function renderAgentCards(agents) {
+            if (!Array.isArray(agents)) return;
+            const roleMap = { monitor: 'agent-card-monitor', execution: 'agent-card-execution', reporting: 'agent-card-reporting' };
+            const roleIcons = { monitor: '📡', execution: '🔧', reporting: '📝' };
+
+            agents.forEach(agent => {
+                const cardId = roleMap[agent.role];
+                if (!cardId) return;
+                const card = document.getElementById(cardId);
+                if (!card) return;
+
+                const isActive = agentActiveState[agent.role] || false;
+                card.className = 'agent-card' + (isActive ? ' active-agent' : '');
+
+                const trustColor = agent.trustScore >= 80 ? 'hsl(150, 70%, 50%)' : agent.trustScore >= 50 ? 'hsl(35, 90%, 55%)' : 'hsl(0, 84%, 65%)';
+                const scopesHtml = agent.scopes.map(s => `<span class="agent-scope-tag">${escapeHtml(s)}</span>`).join('');
+                const actionsHtml = agent.recentActions && agent.recentActions.length > 0
+                    ? agent.recentActions.slice(-5).map(a => `<div>${escapeHtml(a)}</div>`).join('')
+                    : '<div style="color:rgba(255,255,255,0.3);">No actions yet</div>';
+
+                card.innerHTML = `
+                    <div class="agent-card-header">
+                        <span class="agent-card-name">${roleIcons[agent.role] || '🤖'} ${escapeHtml(agent.name)}</span>
+                        ${isActive ? '<span class="agent-active-badge">Active</span>' : '<span class="agent-idle-badge">Idle</span>'}
+                    </div>
+                    <div class="agent-did">${escapeHtml(agent.did)}</div>
+                    <div class="agent-scopes-list">${scopesHtml}</div>
+                    <div class="agent-meta-row">
+                        <span class="agent-meta-item">Trust: <strong style="color:${trustColor}">${agent.trustScore}/100</strong></span>
+                        <span class="agent-meta-item">Incidents: <strong>${agent.incidentCount}</strong></span>
+                        <span class="agent-meta-item">Last: <strong>${timeAgo(agent.lastActiveAt)}</strong></span>
+                    </div>
+                    <div class="agent-trust-bar"><div class="agent-trust-fill" style="width:${agent.trustScore}%; background:${trustColor};"></div></div>
+                    <div class="agent-actions-list">${actionsHtml}</div>
+                `;
+            });
+        }
+
+        // ============================================================
+        // Pipeline visualization — injected into incidents table
+        // ============================================================
+        function buildPipelineViz(incident) {
+            const activeAgent = incident.activeAgent || '';
+            const handoffLog = incident.agentHandoffLog || [];
+            const hasMonitorHandoff = handoffLog.some(h => h.sourceAgentDid && h.sourceAgentDid.includes('monitor'));
+            const hasExecutionHandoff = handoffLog.some(h => h.sourceAgentDid && h.sourceAgentDid.includes('execution'));
+            const pipelineState = incident.pipelineState || '';
+
+            // Determine step states
+            let monitorState = 'pending', execState = 'pending', reportState = 'pending';
+            if (hasMonitorHandoff || activeAgent.includes('execution') || activeAgent.includes('reporting') || pipelineState === 'completed') {
+                monitorState = 'completed';
+            } else if (activeAgent.includes('monitor')) {
+                monitorState = 'active';
+            }
+            if (hasExecutionHandoff || activeAgent.includes('reporting') || pipelineState === 'completed') {
+                execState = 'completed';
+            } else if (activeAgent.includes('execution')) {
+                execState = 'active';
+            }
+            if (pipelineState === 'completed' && incident.report) {
+                reportState = 'completed';
+            } else if (activeAgent.includes('reporting')) {
+                reportState = 'active';
+            }
+
+            // Update agent active states for card highlighting
+            if (monitorState === 'active') agentActiveState['monitor'] = true;
+            else agentActiveState['monitor'] = false;
+            if (execState === 'active') agentActiveState['execution'] = true;
+            else if (execState !== 'active' && !agentActiveState['execution']) agentActiveState['execution'] = false;
+            if (reportState === 'active') agentActiveState['reporting'] = true;
+            else if (reportState !== 'active') agentActiveState['reporting'] = false;
+
+            const reportBtn = (pipelineState === 'completed' || incident.report)
+                ? ` <button class="view-report-btn" onclick="showReportModal('${escapeHtml(incident.id)}')">View Report</button>`
+                : '';
+
+            return `<div class="pipeline-viz">
+                <span class="pipeline-step ${monitorState}">Monitor</span>
+                <span class="pipeline-arrow">→</span>
+                <span class="pipeline-step ${execState}">Execution</span>
+                <span class="pipeline-arrow">→</span>
+                <span class="pipeline-step ${reportState}">Reporting</span>
+                ${reportBtn}
+            </div>`;
+        }
+
+        // ============================================================
+        // Report Viewer
+        // ============================================================
+        async function showReportModal(incidentId) {
+            const modal = document.getElementById('report-modal');
+            const content = document.getElementById('report-content');
+            const title = document.getElementById('report-modal-title');
+            title.textContent = `Post-Incident Report: ${incidentId}`;
+            content.innerHTML = '<div style="text-align:center; padding:2rem; color:rgba(255,255,255,0.6);">Loading report...</div>';
+            modal.classList.add('active');
+
+            try {
+                const res = await fetch(`/api/incidents/${incidentId}/report?_=${Date.now()}`);
+                if (!res.ok) {
+                    const err = await res.json();
+                    content.innerHTML = `<div style="color:hsl(0,84%,65%); padding:2rem; text-align:center;">${escapeHtml(err.error || 'Report not available')}</div>`;
+                    return;
+                }
+                const report = await res.json();
+                renderReport(report, content);
+            } catch (err) {
+                content.innerHTML = `<div style="color:hsl(0,84%,65%); padding:2rem; text-align:center;">Failed to load report: ${escapeHtml(err.message)}</div>`;
+            }
+        }
+
+        function renderReport(report, container) {
+            // All text is escaped — never use innerHTML with untrusted LLM output directly
+            const timelineHtml = (report.timeline || []).map(item =>
+                `<div class="report-timeline-item">
+                    <div class="report-timeline-time">${escapeHtml(item.time || '')}</div>
+                    <div>${escapeHtml(item.event || '')}</div>
+                </div>`
+            ).join('');
+
+            const approvalHtml = (report.approvalChain || []).map(a =>
+                `<li>${escapeHtml(typeof a === 'string' ? a : JSON.stringify(a))}</li>`
+            ).join('');
+
+            const recsHtml = (report.recommendations || []).map(r =>
+                `<li>${escapeHtml(typeof r === 'string' ? r : JSON.stringify(r))}</li>`
+            ).join('');
+
+            const handoffHtml = (report.agentHandoffChain || []).map(h =>
+                `<li>${escapeHtml(typeof h === 'string' ? h : JSON.stringify(h))}</li>`
+            ).join('');
+
+            container.innerHTML = `
+                <div class="report-section-block">
+                    <h4>Executive Summary</h4>
+                    <p>${escapeHtml(report.executiveSummary || 'No summary available.')}</p>
+                </div>
+                <div class="report-section-block">
+                    <h4>Resolution Status</h4>
+                    <p><strong>${escapeHtml(report.resolutionStatus || 'Unknown')}</strong> — Duration: ${escapeHtml(report.duration || 'N/A')}</p>
+                </div>
+                <div class="report-section-block">
+                    <h4>Timeline</h4>
+                    ${timelineHtml || '<p>No timeline entries.</p>'}
+                </div>
+                <div class="report-section-block">
+                    <h4>Root Cause</h4>
+                    <p>${escapeHtml(report.rootCause || 'Undetermined.')}</p>
+                </div>
+                <div class="report-section-block">
+                    <h4>Fix Applied</h4>
+                    <p>${escapeHtml(report.fixApplied || 'No fix applied.')}</p>
+                </div>
+                ${approvalHtml ? `<div class="report-section-block"><h4>Approval Chain</h4><ul>${approvalHtml}</ul></div>` : ''}
+                ${handoffHtml ? `<div class="report-section-block"><h4>Agent Handoff Chain</h4><ul>${handoffHtml}</ul></div>` : ''}
+                ${recsHtml ? `<div class="report-section-block"><h4>Recommendations</h4><ul>${recsHtml}</ul></div>` : ''}
+                <div class="report-section-block">
+                    <h4>Metadata</h4>
+                    <p style="font-size:0.75rem; color:rgba(255,255,255,0.5);">
+                        Generated: ${escapeHtml(report.generatedAt || 'N/A')}<br>
+                        By: ${escapeHtml(report.generatedByAgent || 'N/A')}<br>
+                        Audit entries: ${report.auditLedgerEntryCount || 0}
+                    </p>
+                </div>
+            `;
+        }
+
+        function hideReportModal() {
+            document.getElementById('report-modal').classList.remove('active');
+        }
+
+        function closeReportModal(event) {
+            if (event.target === document.getElementById('report-modal')) {
+                hideReportModal();
+            }
+        }
+
+        // ============================================================
+        // Stress Demo & Scope Violation Test
+        // ============================================================
+        async function triggerStress() {
+            let connections = parseInt(document.getElementById('stress-connections').value) || 10;
+            let holdMs = parseInt(document.getElementById('stress-hold').value) || 2000;
+            // Client-side bounds enforcement
+            connections = Math.max(1, Math.min(50, connections));
+            holdMs = Math.max(500, Math.min(10000, holdMs));
+            appendTerminalLog(`Stress simulation: ${connections} connections for ${holdMs}ms...`, 'system');
+            try {
+                const res = await fetch('/api/stress', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ connections, holdMs })
+                });
+                const data = await res.json();
+                appendTerminalLog(`Stress result: ${data.message} (active: ${data.activeConnections})`, 'success');
+            } catch (err) {
+                appendTerminalLog(`Stress test failed: ${err.message}`, 'error');
+            }
+        }
+
+        async function testScopeViolation() {
+            appendTerminalLog('Testing scope enforcement: Monitoring Agent → createPR (should be denied)...', 'system');
+            try {
+                const res = await fetch('/api/agents/test-scope-violation', { method: 'POST' });
+                const data = await res.json();
+                if (data.result === 'PASS') {
+                    appendTerminalLog(`Scope violation PASS: ${data.error}`, 'success');
+                    if (data.monitorAgentTrustScore != null) {
+                        appendTerminalLog(`Monitoring Agent trust score: ${data.monitorAgentTrustScore}/100`, 'info');
+                    }
+                } else {
+                    appendTerminalLog(`Scope violation test FAILED: ${JSON.stringify(data)}`, 'error');
+                }
+                // Refresh agent cards to show updated trust score
+                fetchAgents();
+            } catch (err) {
+                appendTerminalLog(`Scope violation test error: ${err.message}`, 'error');
+            }
+        }
+
         // Restore session or show login after all dashboard code is ready
         if (sessionStorage.getItem(AUTH_KEY) === "true") {
             if (sessionStorage.getItem(LANDING_KEY) === "true") {
@@ -1498,6 +1990,19 @@
             </div>
             <div id="runbook-steps-content" class="runbook-steps-list">
                 <!-- Steps dynamically rendered here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Report Viewer Modal -->
+    <div id="report-modal" class="modal-overlay" onclick="closeReportModal(event)">
+        <div class="modal-card" onclick="event.stopPropagation()" style="max-width: 720px; max-height: 85vh; overflow-y: auto;">
+            <div class="modal-header">
+                <h2 id="report-modal-title">Post-Incident Report</h2>
+                <button class="close-modal-btn" onclick="hideReportModal()">&times;</button>
+            </div>
+            <div id="report-content" class="runbook-steps-list" style="max-height: none;">
+                <div style="text-align:center; padding:2rem; color:rgba(255,255,255,0.6);">Loading report...</div>
             </div>
         </div>
     </div>

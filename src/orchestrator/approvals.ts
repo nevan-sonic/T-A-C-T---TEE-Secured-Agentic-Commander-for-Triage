@@ -1,4 +1,5 @@
-import { T3Session, ApprovalResult, requestDelegation, activeIncidents } from "./agent-core";
+import { T3Session, ApprovalResult, requestDelegation } from "./agent-core";
+import { activeIncidents } from "./incident-store";
 import { writeAudit } from "./audit";
 
 export async function requestApprovals(

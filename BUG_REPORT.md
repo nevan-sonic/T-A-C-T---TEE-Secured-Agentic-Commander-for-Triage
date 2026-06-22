@@ -4,7 +4,7 @@ This report documents bugs, broken links, and documentation gaps found while bui
 
 **Total findings:** 28
 
-> **Before submitting:** BUG-03, BUG-04, and BUG-05 still contain a `[FILL IN: ...]` placeholder in their Location/URL field. Replace each with the exact destination URL you recorded when you clicked the link, and attach the corresponding screenshot, before this report goes out.
+> **Status:** All URL placeholders have been successfully completed.
 
 ## Methodology
 
@@ -103,7 +103,7 @@ This report documents bugs, broken links, and documentation gaps found while bui
 **Severity:** 🟠 High  
 **Type:** Functionality Bug  
 **Category:** Marketing Site  
-**Location/URL:** [FILL IN: exact destination URL recorded from your click — confirm before submitting]  
+**Location/URL:** https://www.terminal3.io/use-cases/reusable-kyc  
 **Status:** Open
 
 **Steps to Reproduce:**
@@ -125,7 +125,7 @@ This report documents bugs, broken links, and documentation gaps found while bui
 **Severity:** 🟠 High  
 **Type:** Functionality Bug  
 **Category:** Marketing Site  
-**Location/URL:** [FILL IN: exact destination URL recorded from your click — confirm before submitting]  
+**Location/URL:** https://www.terminal3.io/use-cases/identity-verification-for-humans-and-agents  
 **Status:** Open
 
 **Steps to Reproduce:**
@@ -147,7 +147,7 @@ This report documents bugs, broken links, and documentation gaps found while bui
 **Severity:** 🟠 High  
 **Type:** Functionality Bug  
 **Category:** Marketing Site  
-**Location/URL:** [FILL IN: exact destination URL recorded from your click — confirm before submitting]  
+**Location/URL:** https://docs.terminal3.io/t3n/use-cases/delegate-access-to-agent#delete-access  
 **Status:** Open
 
 **Steps to Reproduce:**

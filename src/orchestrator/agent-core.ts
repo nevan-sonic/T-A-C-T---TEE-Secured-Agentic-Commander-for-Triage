@@ -12,21 +12,14 @@ import { executeRollback } from "./rollback";
 import { createPR, initializeLocalRepo } from "./github";
 import { notifySlack } from "./notify";
 import { writeAudit } from "./audit";
+import { Alert, IncidentState, activeIncidents, getIncident, updateIncident } from "./incident-store";
+import { requireEnvironment } from "../config/env";
 
 // Load environment variables
 dotenv.config();
 
-export interface Alert {
-    id: string;
-    severity: string;
-    service: string;
-    triggeredAt: string;
-    errorRate: number;
-    p99Latency: number;
-    logs: string[];
-    onCallEngineerDID: string;
-    codeOwnerDID: string;
-}
+// Re-export from incident-store for backward compatibility
+export { Alert, IncidentState, activeIncidents, getIncident, updateIncident };
 
 export interface T3Session {
     sessionId: string;
@@ -95,6 +88,9 @@ export function isBillingOrNetworkException(err: any): boolean {
            msg.includes("502") ||
            msg.includes("503") ||
            msg.includes("504") ||
+           msg.includes("404") ||
+           msg.includes("not_found") ||
+           msg.includes("Method not found") ||
            msg.includes("fetch failed") ||
            msg.includes("ECONNREFUSED") ||
            msg.includes("ETIMEDOUT");
@@ -103,7 +99,19 @@ export function isBillingOrNetworkException(err: any): boolean {
 export async function initT3n() {
     if (sdk) return;
 
-    const agentKey = process.env.T3_PRIVATE_KEY || process.env.T3N_API_KEY || Wallet.createRandom().privateKey;
+    let agentKey: string;
+    try {
+        agentKey = requireEnvironment("T3N_API_KEY");
+    } catch {
+        // T3_PRIVATE_KEY is a legacy alias
+        const legacy = process.env.T3_PRIVATE_KEY;
+        if (legacy) {
+            agentKey = legacy;
+        } else {
+            console.warn("[T3N SDK] T3N_API_KEY not set. Using simulation mode with derived key.");
+            agentKey = ethers.keccak256(ethers.toUtf8Bytes("tact-agent-fallback"));
+        }
+    }
     const personaKeys = {
         alice: process.env.ALICE_PRIVATE_KEY || ethers.keccak256(ethers.toUtf8Bytes("alice")),
         bob: process.env.BOB_PRIVATE_KEY || ethers.keccak256(ethers.toUtf8Bytes("bob")),
@@ -569,43 +577,35 @@ export async function executeUnder<T>(config: ExecuteUnderConfig<T>): Promise<T>
     return config.action(secureContext);
 }
 
-// Real-time active incidents tracking map
-export const activeIncidents = new Map<string, {
-    alert: Alert;
-    status: string;
-    severity: Severity;
-    logs: string[];
-    rootCause?: string;
-    patch?: string;
-    prUrl?: string;
-    prNumber?: number;
-    branch?: string;
-    mergeCommit?: string;
-    revertCommit?: string;
-    logsReadTime?: number;
-    prCreatedTime?: number;
-    mergedTime?: number;
-    resolvedTime?: number;
-    rolledBackTime?: number;
-    triggeredTime?: number;
-    patchScore?: number;
-    autoMode?: boolean;
-    triggerType?: "manual" | "webhook" | "auto-traffic" | "github-cve" | "pagerduty" | "cloudwatch";
-    patchConfidence?: number;
-    canaryResults?: Array<{ timestamp: number; errorRate: number; latency: number; pass: boolean }>;
-    runbookSteps?: RunbookStep[];
-    costSaving?: number;
-    session?: T3Session;
-}>();
+// Real-time active incidents tracking map is now in incident-store.ts
+// (imported and re-exported above for backward compatibility)
 
 export async function handleIncident(alert: Alert, autoMode: boolean = false): Promise<void> {
     console.log(`\n============================================================`);
     console.log(`[Incident Manager] New Incident Triggered: ${alert.id} (${alert.service})`);
     console.log(`[Incident Manager] Mode: ${autoMode ? "🤖 AUTO-DETECT (bypasses PR + approvals)" : "👤 Manual Pipeline"}`);
     console.log(`============================================================`);
-    
-    // Initialize repository on filesystem
+
+    // Initialize repository on filesystem (preserved existing behavior)
     initializeLocalRepo();
+
+    // -----------------------------------------------------------------------
+    // Phase 2: Three-Agent Harness (non-autoMode)
+    // Lazy-require to avoid circular imports.
+    // -----------------------------------------------------------------------
+    if (!autoMode) {
+        try {
+            const { runAgentHarness } = require("../agents/harness");
+            await runAgentHarness(alert);
+            return;
+        } catch (harnessErr: any) {
+            console.error(`[Incident Manager] Harness delegation failed: ${harnessErr.message}. Falling back to legacy pipeline.`);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Legacy pipeline (autoMode or harness fallback)
+    // -----------------------------------------------------------------------
 
     // Register active incident with timing
     const triggeredTime = Date.now();
@@ -792,7 +792,7 @@ export async function handleIncident(alert: Alert, autoMode: boolean = false): P
             return;
         }
 
-        // ===== MANUAL PIPELINE PATH (P2/P1 buttons, webhooks) =====
+        // ===== MANUAL PIPELINE PATH (P2/P1 buttons, webhooks) — Legacy fallback =====
 
         // Step 5: Draft Pull Request (Create Branch) under Code Owner identity
         incident.status = "Drafting Pull Request";

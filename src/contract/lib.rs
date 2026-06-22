@@ -19,7 +19,15 @@ struct Component;
 // Helper to retrieve namespaced secret from z:<tid>:secrets
 fn get_secret_key(key: &str) -> Result<String, String> {
     let tid = tenant_did();
-    let map_name = format!("z:{}:secrets", hex::encode(&tid));
+    let tid_str = String::from_utf8(tid.clone()).unwrap_or_else(|_| hex::encode(&tid));
+    let tid_hex = if tid_str.starts_with("did:t3n:") {
+        tid_str["did:t3n:".len()..].to_string()
+    } else if tid_str.chars().all(|c| c.is_ascii_hexdigit()) {
+        tid_str
+    } else {
+        hex::encode(&tid)
+    };
+    let map_name = format!("z:{}:secrets", tid_hex);
     
     info(&format!("Contract reading from private KV map: {}", map_name));
     
