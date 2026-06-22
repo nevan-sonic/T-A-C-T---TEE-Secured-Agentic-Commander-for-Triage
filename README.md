@@ -38,8 +38,8 @@
 ## 🎥 Demo
 
 <p align="center">
-  <a href="https://youtu.be/BGX3M2ZWhFI">
-    <img src="https://img.youtube.com/vi/BGX3M2ZWhFI/maxresdefault.jpg" alt="Demo Video">
+  <a href="https://youtu.be/dJdmmqwgfrY">
+    <img src="https://img.youtube.com/vi/dJdmmqwgfrY/maxresdefault.jpg" alt="Demo Video">
   </a>
 </p>
 
