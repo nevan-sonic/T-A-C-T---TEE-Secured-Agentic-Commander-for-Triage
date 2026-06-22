@@ -386,16 +386,88 @@ Approval ID: <random_uuid>
 
 ## 🦀 The Rust WASM Contract
 
-The heart of the TEE — four functions that run **inside the enclave**, reading secrets directly from the private KV store:
+The core cryptographic and orchestrational logic runs inside the TEE enclave as a compiled WebAssembly component (`wasm32-wasip2`). The component implements the guest contract interfaces defined using the WebAssembly Interface Type (WIT) format.
 
-| Function | Purpose |
-|:---------|:--------|
-| `investigate-logs` | Reads Groq key from private KV → calls Groq API → returns `{ rootCause, patch, explanation }` |
-| `create-fix-pr` | Reads GitHub token → creates branch + commits file + opens PR via GitHub API |
-| `merge-fix` | Reads GitHub token → merges the PR via GitHub API |
-| `revert-commit` | Reads GitHub token → overwrites file with original content via GitHub API |
+### 1. WIT Interface Definition (`wit/world.wit`)
+The contract specifies standard entrypoints and imports system capability interfaces from the Terminal 3 runtime host:
 
-> **Critical:** All secrets are read from `z:<tid>:secrets` — they **never exist in host memory**.
+```wit
+package z:department-of-incidents@0.1.0;
+
+interface contracts {
+    record generic-input {
+        input: option<list<u8>>,
+        user-profile: option<list<u8>>,
+        context: option<list<u8>>,
+    }
+
+    investigate-logs: func(req: generic-input) -> result<list<u8>, string>;
+    create-fix-pr: func(req: generic-input) -> result<list<u8>, string>;
+    merge-fix: func(req: generic-input) -> result<list<u8>, string>;
+    revert-commit: func(req: generic-input) -> result<list<u8>, string>;
+}
+
+world department-of-incidents {
+    import host:tenant/tenant-context@1.0.0;
+    import host:interfaces/logging@2.1.0;
+    import host:interfaces/kv-store@2.1.0;
+    import host:interfaces/http@2.1.0;
+    import host:interfaces/http-with-placeholders@2.1.0;
+
+    export contracts;
+}
+```
+
+### 2. Guest Contract Functions
+The WASM component exports four core functions, reading credentials directly from the private KV store:
+
+| Function | WIT Signature | Enclave Operation |
+|:---------|:--------------|:------------------|
+| `investigate-logs` | `generic-input -> result<list<u8>, string>` | Reads `groq_api_key` ➔ Calls Groq API ➔ Returns `{ rootCause, patch, explanation }` |
+| `create-fix-pr` | `generic-input -> result<list<u8>, string>` | Reads `github_token` ➔ Calls GitHub Contents/Refs API ➔ Creates branch & PR |
+| `merge-fix` | `generic-input -> result<list<u8>, string>` | Reads `github_token` ➔ Merges the PR via GitHub Pulls API |
+| `revert-commit` | `generic-input -> result<list<u8>, string>` | Reads `github_token` ➔ Reverts/rolls back file contents via GitHub API |
+
+### 3. Secure Secret Retrieval inside Enclave
+Within the WASM guest, secrets are retrieved from the private namespace without ever exposing them to the host memory of the Node.js server. The contract dynamically resolves the Tenant DID to query the correct KV store map:
+
+```rust
+use crate::host::tenant::tenant_context::tenant_did;
+use crate::host::interfaces::kv_store::get;
+
+fn get_secret_key(key: &str) -> Result<String, String> {
+    let tid = tenant_did();
+    let tid_str = String::from_utf8(tid.clone()).unwrap_or_else(|_| hex::encode(&tid));
+    let tid_hex = if tid_str.starts_with("did:t3n:") {
+        tid_str["did:t3n:".len()..].to_string()
+    } else {
+        hex::encode(&tid)
+    };
+    
+    // Target private map z:<tid>:secrets
+    let map_name = format!("z:{}:secrets", tid_hex);
+    let bytes = get(&map_name, key.as_bytes())
+        .map_err(|e| format!("KV Read Error: {}", e))?
+        .ok_or_else(|| format!("Key '{}' not found", key))?;
+        
+    String::from_utf8(bytes).map_err(|e| format!("Encoding Error: {}", e))
+}
+```
+
+### 4. AWS Placeholder Injection (`http-with-placeholders`)
+For cloud remediation actions (such as EC2/RDS rightsizing), the guest contract utilizes **placeholder injection**. Instead of loading raw AWS credentials into memory, it constructs HTTP calls with placeholder patterns:
+
+```rust
+let headers = vec![
+    ("X-Aws-Access-Key".to_string(), "{{profile.aws_access_key_id}}".to_string()),
+    ("X-Aws-Secret-Key".to_string(), "{{profile.aws_secret_access_key}}".to_string()),
+];
+```
+
+The host runtime interceptor replaces these placeholders with credentials stored securely in the enclave immediately before sending the network request, ensuring the host operating system never sees the plaintext keys.
+
+> [!IMPORTANT]
+> Because all private keys are read from `z:<tid>:secrets` inside the enclave, they are **never exposed in host memory** and cannot be read by an attacker who compromises the Node.js process.
 
 ---
 
