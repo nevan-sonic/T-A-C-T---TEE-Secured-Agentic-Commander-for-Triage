@@ -92,7 +92,7 @@ Every action is written to an **immutable audit ledger** on the Terminal 3 testn
 │  │  React+Vite  │◄──►│  Express.js      │◄──►│  Rust → WASM  │  │
 │  │  (Login)     │    │  (REST API)      │    │  (wasm32-     │  │
 │  │              │    │                  │    │   wasip2)     │  │
-│  │  Vanilla JS  │    │  Webhook Router  │    │               │  │
+│  │              │    │  Webhook Router  │    │               │  │
 │  │  (Dashboard) │    │  Traffic Sim     │    │  Intel TDX    │  │
 │  │              │    │                  │    │  Simulator    │  │
 │  └──────────────┘    └──────────────────┘    └───────────────┘  │
