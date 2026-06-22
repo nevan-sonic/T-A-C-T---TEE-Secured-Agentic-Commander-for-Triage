@@ -301,9 +301,88 @@ APM Alert ──► Webhook ──► Normalize Payload ──► handleIncident
                             │                 │  Push to GitHub
                             └─────────────────┘
 ```
-
 ---
 
+## 🔒 Terminal 3 SDK/ADK Deep-Dive Integration
+
+T.A.C.T. is fully integrated with the **Terminal 3 Agent Development Kit (ADK)** and **Software Development Kit (SDK)**, implementing a multi-user delegated topology, secure enclave-isolated credential vaulting, and cryptographically verified action execution.
+
+### 1. SDK Core Architecture & Handshake
+At startup, the orchestrator initializes the connection to the Terminal 3 Network using the `@terminal3/t3n-sdk` client. The handshake and authentication flow maps directly to the testnet:
+
+```typescript
+import { 
+    T3nClient, 
+    TenantClient, 
+    setEnvironment, 
+    loadWasmComponent, 
+    eth_get_address, 
+    metamask_sign, 
+    createEthAuthInput 
+} from "@terminal3/t3n-sdk";
+
+// Initialize environment
+setEnvironment("testnet");
+const wasmComponent = await loadWasmComponent();
+
+// Derive tenant address and DID
+const tenantAddress = eth_get_address(process.env.T3N_API_KEY);
+const client = new T3nClient({
+    wasmComponent,
+    handlers: {
+        EthSign: metamask_sign(tenantAddress, undefined, process.env.T3N_API_KEY)
+    }
+});
+
+await client.handshake();
+const authResult = await client.authenticate(createEthAuthInput(tenantAddress));
+const tenantDID = authResult.value;
+```
+
+### 2. Tenant-Delegate Topology
+T.A.C.T. utilizes a **single-tenant, multi-delegate topology**:
+* **Tenant**: The primary Agent itself registers as the Tenant and maintains the `TenantClient` instance used to configure namespace security boundaries.
+* **Delegates (Alice, Bob, Charlie)**: Lightweight user sessions are handshaked and authenticated using `client.authenticate(...)` under the hood to fetch opaque, session-scoped DIDs (`did:t3n:...`), preventing key exposure while proving identity.
+* **Address Mapping**: Because testnet DIDs are session-scoped and opaque, the enclave simulator maintains a mapping registry:
+  ```typescript
+  // Registers the public signing key address matching the opaque session DID
+  registerDidAddress(sessionDid, signerAddress);
+  ```
+
+### 3. Enclave-Isolated Map Architecture
+Two distinct storage layers are created inside the enclave's secure boundary using Terminal 3 KV namespaces:
+
+#### A. Private Secrets Map (`z:<tenant_did>:secrets`)
+* **Visibility**: `private` (hidden from the host operating system/Node.js parent process).
+* **Access Control List (ACL)**: `Readers: [ContractID]`, `Writers: [ContractID]`.
+* **Security Model**: The host process seeds credentials (like `GITHUB_TOKEN` and `GROQ_API_KEY`) into the map on boot. Once stored, only the Rust WASM contract code running inside the TEE guest environment has read/write permissions. Any `getSecret()` call from the host throws a security exception.
+
+#### B. Public Audit Ledger (`z:<tenant_did>:audit-ledger`)
+* **Visibility**: `public` (globally readable, write-gated to the contract).
+* **Entries**: Logs cryptographic proof of every transaction (outage detection, log analysis, patch scoring, approval signature, Git merge, and auto-rollback).
+
+### 4. Cryptographic Approval Gate Ceremony (`executeUnder`)
+For high-risk operations (such as merging code to `main` or reverting commits), the orchestrator blocks execution until the approver signs a delegation challenge.
+
+#### The EIP-191 Signing Format:
+The approver signs a standard Ethereum signature challenge:
+```text
+T3 Agent Authorization Grant
+Agent DID: did:t3:agent:department-of-incidents
+Contract: z:<tenant_address_hex>:incident-contracts
+Function: <scope_type> (e.g. repo:merge, aws:rightsize)
+Outbound Hosts: api.github.com
+Approval ID: <random_uuid>
+```
+
+#### Enclave-Side Verification:
+1. The signature and message are sent to the `/api/approve` endpoint.
+2. The orchestrator calls `client.executeAndDecode(...)` to invoke the Guest Rust WASM contract inside the TEE.
+3. The guest contract performs ECDSA public key recovery (`secp256k1`) inside the enclave to extract the signer's address from the EIP-191 signature.
+4. It compares the recovered address to the allowed DIDs.
+5. If verified, the TEE securely loads the `GITHUB_TOKEN` from the private secrets map and executes the GitHub API call to merge or revert.
+
+---
 
 ## 🦀 The Rust WASM Contract
 
