@@ -33,7 +33,9 @@
 <br/>
 
 </div>
-<img src="./public/divider.svg" width="100%">
+
+---
+
 
 ## 🎥 Demo
 
@@ -46,12 +48,16 @@
 Click the thumbnail above to watch the demo.
 
 > **Note to Judges:** The demo video shows execution against the **real Terminal 3 testnet**. If `T3N_API_KEY` is invalid, the contract is unregistered, or testnet fuel is exhausted, the system gracefully falls back to `enclave-sim.ts` (local simulation mode). The system logs clearly indicate `[T3N SDK] ⚠ GRACEFUL FALLBACK` or `Real testnet execution ... failed` when simulation mode activates.
-<img src="./public/divider.svg" width="100%">
+
+---
+
 
 ## Bug Bounty Submission
 
 See [BUG_REPORT.md](./BUG_REPORT.md) for the full list of bugs, broken links, and documentation gaps found in the Terminal 3 SDK, developer docs, and marketing site, submitted as part of the Terminal 3 Bug Discovery Bounty.
-<img src="./public/divider.svg" width="100%">
+
+---
+
 
 ## ⚡ What Is T.A.C.T.?
 
@@ -70,7 +76,9 @@ Every action is written to an **immutable audit ledger** on the Terminal 3 testn
 <p align="center">
   <img src="./public/canary-heartbeat.svg" alt="Canary Telemetry Heartbeat" width="320">
 </p>
-<img src="./public/divider.svg" width="100%">
+
+---
+
 
 ## 🏗️ System Architecture
 
@@ -100,7 +108,9 @@ Every action is written to an **immutable audit ledger** on the Terminal 3 testn
 | 🖥️ **Frontend** | React + Vite · Vanilla JS Dashboard | Glassmorphic control center UI |
 | ⚙️ **Backend** | Express.js (Node.js) | REST API server, webhook router, traffic simulator |
 | 🔐 **TEE / Contract** | Rust → WASM (`wasm32-wasip2`) | Guest contract executed inside hardware enclave simulator |
-<img src="./public/divider.svg" width="100%">
+
+---
+
 
 ## 🚀 Boot Sequence
 
@@ -140,7 +150,9 @@ When you run `node server.js`, the system initializes in strict order:
         ├─ /          → React login app
         └─ /dashboard → Glassmorphic control center
 ```
-<img src="./public/divider.svg" width="100%">
+
+---
+
 
 ## 🎯 The 6 Trigger Types
 
@@ -214,7 +226,9 @@ Any resolved/merged incident can be manually rolled back via the dashboard. Trig
 </td>
 </tr>
 </table>
-<img src="./public/divider.svg" width="100%">
+
+---
+
 
 ## 🔄 The Incident Resolution Pipeline
 
@@ -287,7 +301,9 @@ APM Alert ──► Webhook ──► Normalize Payload ──► handleIncident
                             │                 │  Push to GitHub
                             └─────────────────┘
 ```
-<img src="./public/divider.svg" width="100%">
+
+---
+
 
 ## 🦀 The Rust WASM Contract
 
@@ -301,7 +317,9 @@ The heart of the TEE — four functions that run **inside the enclave**, reading
 | `revert-commit` | Reads GitHub token → overwrites file with original content via GitHub API |
 
 > **Critical:** All secrets are read from `z:<tid>:secrets` — they **never exist in host memory**.
-<img src="./public/divider.svg" width="100%">
+
+---
+
 
 ## 🛡️ Zero-Secrets Security Model
 
@@ -331,7 +349,9 @@ The heart of the TEE — four functions that run **inside the enclave**, reading
 3. TypeScript orchestrator only receives structured results — never raw credentials
 4. On real testnet: `buildSecureContext().getSecret()` **throws** if real client is active
 5. Fallback to local simulator only on billing/network errors
-<img src="./public/divider.svg" width="100%">
+
+---
+
 
 ## 🏛️ Enclave Simulator
 
@@ -353,7 +373,9 @@ EnclaveSimulator
 └── Contract ID Allocation
     └── Map reader/writer ACL enforcement
 ```
-<img src="./public/divider.svg" width="100%">
+
+---
+
 
 ## 📡 API Reference
 
@@ -379,7 +401,9 @@ EnclaveSimulator
 | `GET` | `/api/dev-wallet` | Dev-only wallet sync |
 
 </details>
-<img src="./public/divider.svg" width="100%">
+
+---
+
 
 ## 🔐 Severity Gating Model
 
@@ -393,7 +417,9 @@ Severity   Approvals Required    Rollback Policy
             (code owner           Fresh TEE session
              + second approver)   Re-sign required
 ```
-<img src="./public/divider.svg" width="100%">
+
+---
+
 
 ## 📊 Patch Validation Scoring
 
@@ -421,7 +447,9 @@ Score Calculation
                      ├── Auto-mode: use fallback patch
                      └── Manual-mode: escalate
 ```
-<img src="./public/divider.svg" width="100%">
+
+---
+
 
 ## 🗂️ Project Structure
 
@@ -460,7 +488,9 @@ tact/
 ├── dist/                      # Compiled TypeScript outputs served at runtime
 └── public/                    # Dashboard UI & React login assets
 ```
-<img src="./public/divider.svg" width="100%">
+
+---
+
 
 ## ⚙️ Getting Started
 
@@ -516,7 +546,9 @@ node server.js
 ```
 
 Then open `http://localhost:3000` → login → dashboard.
-<img src="./public/divider.svg" width="100%">
+
+---
+
 
 ## 🧪 Testing an Incident
 
@@ -561,7 +593,9 @@ curl -X POST http://localhost:3000/api/cloudwatch-webhook \
     }
   }'
 ```
-<img src="./public/divider.svg" width="100%">
+
+---
+
 
 ## 🔗 Hackathon Context
 
@@ -572,12 +606,13 @@ Built for the **Terminal 3 hackathon** — demonstrating the full T3 ADK stack:
 - **Private KV secrets** — z-namespace ACL-governed secret store
 - **Public audit ledger** — immutable on-chain action log
 - **Severity-gated delegation** — EIP-191 credential flow per P1/P2/P3
-<img src="./public/divider.svg" width="100%">
+
+---
+
 
 <div align="center">
 
-<!-- Footer wave -->
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:0ea5e9,50:8b5cf6,100:ec4899&height=120&section=footer" width="100%"/>
+
 
 <p>
   <img src="https://img.shields.io/badge/Built%20for-Terminal%203%20Hackathon-6C47FF?style=flat-square"/>
